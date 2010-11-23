@@ -1,9 +1,12 @@
+include $(GOROOT)/src/Make.inc
 
-all:
-	cd src && $(MAKE)
+TARG=gozk
 
-test:
-	cd src && gotest
+CGOFILES=\
+	gozk.go\
 
-%:
-	cd src && $(MAKE) $@
+CGO_LDFLAGS+=-lzookeeper_mt
+
+include $(GOROOT)/src/Make.pkg
+
+_cgo_defun.c: helpers.c
