@@ -285,7 +285,7 @@ func SetLogLevel(level int) {
 // by commas, so that the client will automatically attempt to connect
 // to another server if one of them stops working for whatever reason.
 //
-// The recvTimeout parameter, given in milliseconds, allows contorlling
+// The recvTimeout parameter, given in milliseconds, allows controlling
 // the amount of time the connection can stay unresponsive before the
 // server will be considered problematic.
 //

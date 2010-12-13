@@ -76,7 +76,7 @@ watch_data *wait_for_watch() {
 
     pthread_mutex_lock(&watch_mutex);
     {
-        if (first_watch == NULL) {
+        while (first_watch == NULL) {
             pthread_cond_wait(&watch_available, &watch_mutex);
         }
         data = first_watch;
