@@ -2,7 +2,7 @@ package gozk
 
 /*
 #include <zookeeper.h>
-#include "helpers.c"
+#include "helpers.h"
 */
 import "C"
 

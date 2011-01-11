@@ -1,26 +1,14 @@
+
 #include <zookeeper.h>
 #include <pthread.h>
 #include <string.h>
+#include "helpers.h"
 
 
 static pthread_mutex_t watch_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t  watch_available = PTHREAD_COND_INITIALIZER;
 
-typedef struct _watch_data {
-    int connection_state;
-    int event_type;
-    char *event_path;
-    void *watch_context;
-    struct _watch_data *next;
-} watch_data;
-
 static watch_data *first_watch = NULL;
-
-typedef struct _completion_data {
-    pthread_mutex_t mutex;
-    void *data;
-} completion_data;
-
 
 completion_data* create_completion_data() {
     completion_data *data = malloc(sizeof(completion_data));
