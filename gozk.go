@@ -1,3 +1,12 @@
+//
+// gozk - Zookeeper support for the Go language
+//
+//   https://wiki.ubuntu.com/gozk
+//
+// Copyright (c) 2010-2011 Canonical Ltd.
+//
+// Written by Gustavo Niemeyer <gustavo.niemeyer@canonical.com>
+//
 package gozk
 
 /*
