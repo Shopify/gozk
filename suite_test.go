@@ -2,7 +2,7 @@ package gozk_test
 
 
 import (
-    . "gocheck"
+    .   "gocheck"
     "testing"
     "io/ioutil"
     "path"
@@ -21,15 +21,15 @@ func TestAll(t *testing.T) {
 var _ = Suite(&S{})
 
 type S struct {
-    zkRoot string
-    zkTestRoot string
-    zkTestPort int
-    zkServerSh string
+    zkRoot      string
+    zkTestRoot  string
+    zkTestPort  int
+    zkServerSh  string
     zkServerOut *os.File
-    zkAddr string
+    zkAddr      string
 
-    handles []*gozk.ZooKeeper
-    events []*gozk.Event
+    handles     []*gozk.ZooKeeper
+    events      []*gozk.Event
     liveWatches int
     deadWatches chan bool
 }
@@ -38,16 +38,14 @@ type S struct {
 var logLevel = 0 //gozk.LOG_ERROR
 
 
-var testZooCfg = (
-    "dataDir=%s\n" +
+var testZooCfg = ("dataDir=%s\n" +
     "clientPort=%d\n" +
     "tickTime=2000\n" +
     "initLimit=10\n" +
     "syncLimit=5\n" +
     "")
 
-var testLog4jPrp = (
-    "log4j.rootLogger=INFO,CONSOLE\n" +
+var testLog4jPrp = ("log4j.rootLogger=INFO,CONSOLE\n" +
     "log4j.appender.CONSOLE=org.apache.log4j.ConsoleAppender\n" +
     "log4j.appender.CONSOLE.Threshold=DEBUG\n" +
     "log4j.appender.CONSOLE.layout=org.apache.log4j.PatternLayout\n" +
@@ -73,11 +71,11 @@ func (s *S) init(c *C) (*gozk.ZooKeeper, chan *gozk.Event) {
     go func() {
         for !closed(watch) {
             select {
-                case event := <-watch:
-                    sent := bufferedWatch <- event
-                    if !sent {
-                        panic("Too many events in buffered watch!")
-                    }
+            case event := <-watch:
+                sent := bufferedWatch <- event
+                if !sent {
+                    panic("Too many events in buffered watch!")
+                }
             }
         }
         s.deadWatches <- true
@@ -88,7 +86,7 @@ func (s *S) init(c *C) (*gozk.ZooKeeper, chan *gozk.Event) {
 
 func (s *S) SetUpTest(c *C) {
     c.Assert(gozk.CountPendingWatches(), Equals, 0,
-             Bug("Test got a dirty watch state before running!"))
+        Bug("Test got a dirty watch state before running!"))
 
     gozk.SetLogLevel(logLevel)
 }
@@ -102,10 +100,10 @@ func (s *S) TearDownTest(c *C) {
     // Wait for all the goroutines created in s.init() to terminate.
     for s.liveWatches > 0 {
         select {
-            case <-s.deadWatches:
-                s.liveWatches -= 1
-            case <-time.After(5e9):
-                panic("There's a locked watch goroutine :-(")
+        case <-s.deadWatches:
+            s.liveWatches -= 1
+        case <-time.After(5e9):
+            panic("There's a locked watch goroutine :-(")
         }
     }
 
@@ -113,7 +111,7 @@ func (s *S) TearDownTest(c *C) {
     s.handles = make([]*gozk.ZooKeeper, 0)
 
     c.Assert(gozk.CountPendingWatches(), Equals, 0,
-             Bug("Test left live watches behind!"))
+        Bug("Test left live watches behind!"))
 }
 
 
@@ -140,7 +138,7 @@ func (s *S) SetUpSuite(c *C) {
 
     s.zkServerSh = path.Join(s.zkRoot, "bin/zkServer.sh")
     s.zkServerOut, err = os.Open(path.Join(s.zkTestRoot, "stdout.txt"),
-                                 os.O_CREAT | os.O_WRONLY | os.O_APPEND, 0644)
+        os.O_CREAT|os.O_WRONLY|os.O_APPEND, 0644)
     if err != nil {
         panic("Can't open stdout.txt file for server: " + err.String())
     }
@@ -164,14 +162,14 @@ func (s *S) SetUpSuite(c *C) {
 
     log4jPrp := []byte(testLog4jPrp)
     err = ioutil.WriteFile(path.Join(confDir, "log4j.properties"),
-                           log4jPrp, 0644)
+        log4jPrp, 0644)
     if err != nil {
         panic("Can't write log4j.properties: " + err.String())
     }
 
     pid, err := os.ForkExec(s.zkServerSh, []string{s.zkServerSh, "start"},
-                            os.Environ(), "",
-                            []*os.File{os.Stdin, s.zkServerOut, os.Stderr})
+        os.Environ(), "",
+        []*os.File{os.Stdin, s.zkServerOut, os.Stderr})
     if err != nil {
         panic("Problem executing zkServer.sh start: " + err.String())
     }
@@ -187,18 +185,18 @@ func (s *S) SetUpSuite(c *C) {
 func (s *S) TearDownSuite(c *C) {
     var err os.Error
     pid, err := os.ForkExec(s.zkServerSh, []string{s.zkServerSh, "stop"},
-                            os.Environ(), "",
-                            []*os.File{os.Stdin, s.zkServerOut, os.Stderr})
+        os.Environ(), "",
+        []*os.File{os.Stdin, s.zkServerOut, os.Stderr})
     s.zkServerOut.Close()
     if err != nil {
         panic("Problem executing zkServer.sh stop: " + err.String() +
-              " (look for runaway java processes!)")
+            " (look for runaway java processes!)")
     }
     result, err := os.Wait(pid, 0)
     if err != nil {
         panic(err.String())
     } else if result.ExitStatus() != 0 {
         panic("'zkServer.sh stop' exited with non-zero status " +
-              "(look for runaway java processes!)")
+            "(look for runaway java processes!)")
     }
 }

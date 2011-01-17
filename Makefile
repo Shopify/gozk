@@ -1,5 +1,7 @@
 include $(GOROOT)/src/Make.inc
 
+all: package
+
 TARG=gozk
 
 CGOFILES=\
@@ -22,16 +24,43 @@ ifndef STATIC
 CGO_LDFLAGS+=-lzookeeper_mt
 else
 CGO_LDFLAGS+=-lm -lpthread
-CGO_OFILES+=$(wildcard _lib/*.o)
+# XXX This has ordering issues with current Make.pkg:
+#CGO_OFILES+=$(wildcard _lib/*.o)
+#
+#_lib:
+#	@mkdir -p _lib
+#	cd _lib && ar x $(LIBDIR)/libzookeeper_mt.a
+#
+#_cgo_defun.c: _lib
+CGO_OFILES+=\
+	_lib/hashtable_itr.o\
+	_lib/libzkmt_la-zk_hashtable.o\
+	_lib/hashtable.o\
+	_lib/libzkmt_la-zk_log.o\
+	_lib/libzkmt_la-mt_adaptor.o\
+	_lib/libzkmt_la-zookeeper.jute.o\
+	_lib/libzkmt_la-recordio.o\
+	_lib/libzkmt_la-zookeeper.o\
 
-all: package
-_lib:
+_lib/%.o:
 	@mkdir -p _lib
 	cd _lib && ar x $(LIBDIR)/libzookeeper_mt.a
 
-_cgo_defun.c: _lib
+endif
+
+CLEANFILES+=_lib
+
+GOFMT=gofmt -spaces=true -tabwidth=4 -tabindent=false
+
+BADFMT:=$(shell $(GOFMT) -l $(GOFILES) $(CGOFILES) $(wildcard *_test.go))
+
+gofmt: $(BADFMT)
+	@for F in $(BADFMT); do $(GOFMT) -w $$F && echo $$F; done
+
+ifneq ($(BADFMT),)
+ifneq ($(MAKECMDGOALS),gofmt)
+$(warning WARNING: make gofmt: $(BADFMT))
+endif
 endif
 
 include $(GOROOT)/src/Make.pkg
-
-_cgo_defun.c: helpers.c

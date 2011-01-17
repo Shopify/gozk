@@ -2,7 +2,7 @@ package gozk_test
 
 
 import (
-    . "gocheck"
+    .   "gocheck"
     "gozk"
 )
 
@@ -132,8 +132,8 @@ func (s *S) TestGetAndError(c *C) {
 func (s *S) TestCreateAndGet(c *C) {
     zk, _ := s.init(c)
 
-    path, err := zk.Create("/test-", "bababum", gozk.SEQUENCE | gozk.EPHEMERAL,
-                           gozk.WorldACL(gozk.PERM_ALL))
+    path, err := zk.Create("/test-", "bababum", gozk.SEQUENCE|gozk.EPHEMERAL,
+        gozk.WorldACL(gozk.PERM_ALL))
     c.Assert(err, IsNil)
     c.Assert(path, Matches, "/test-[0-9]+")
 
@@ -150,7 +150,7 @@ func (s *S) TestCreateSetAndGet(c *C) {
     zk, _ := s.init(c)
 
     _, err := zk.Create("/test", "", gozk.EPHEMERAL,
-                        gozk.WorldACL(gozk.PERM_ALL))
+        gozk.WorldACL(gozk.PERM_ALL))
     c.Assert(err, IsNil)
 
     stat, err := zk.Set("/test", "bababum", -1) // Any version.
@@ -170,7 +170,7 @@ func (s *S) TestGetAndWatch(c *C) {
     c.Check(gozk.CountPendingWatches(), Equals, 1)
 
     _, err := zk.Create("/test", "one", gozk.EPHEMERAL,
-                        gozk.WorldACL(gozk.PERM_ALL))
+        gozk.WorldACL(gozk.PERM_ALL))
     c.Assert(err, IsNil)
 
     data, stat, watch, err := zk.GetW("/test")
@@ -232,7 +232,7 @@ func (s *S) TestCloseReleasesWatches(c *C) {
     c.Check(gozk.CountPendingWatches(), Equals, 1)
 
     _, err := zk.Create("/test", "one", gozk.EPHEMERAL,
-                        gozk.WorldACL(gozk.PERM_ALL))
+        gozk.WorldACL(gozk.PERM_ALL))
     c.Assert(err, IsNil)
 
     _, _, _, err = zk.GetW("/test")
@@ -289,7 +289,7 @@ func (s *S) TestGetChildrenAndWatch(c *C) {
     c.Check(gozk.CountPendingWatches(), Equals, 2)
 
     _, err = zk.Create("/test1", "", gozk.EPHEMERAL,
-                       gozk.WorldACL(gozk.PERM_ALL))
+        gozk.WorldACL(gozk.PERM_ALL))
     c.Assert(err, IsNil)
 
     event := <-watch
@@ -311,7 +311,7 @@ func (s *S) TestGetChildrenAndWatch(c *C) {
     c.Check(gozk.CountPendingWatches(), Equals, 2)
 
     _, err = zk.Create("/test2", "", gozk.EPHEMERAL,
-                       gozk.WorldACL(gozk.PERM_ALL))
+        gozk.WorldACL(gozk.PERM_ALL))
     c.Assert(err, IsNil)
 
     event = <-watch
@@ -365,7 +365,7 @@ func (s *S) TestExistsAndWatch(c *C) {
     c.Assert(ok, Equals, false)
 
     _, err = zk.Create("/test", "", gozk.EPHEMERAL,
-                       gozk.WorldACL(gozk.PERM_ALL))
+        gozk.WorldACL(gozk.PERM_ALL))
     c.Assert(err, IsNil)
 
     event := <-watch
@@ -403,7 +403,7 @@ func (s *S) TestDelete(c *C) {
     zk, _ := s.init(c)
 
     _, err := zk.Create("/test", "", gozk.EPHEMERAL,
-                        gozk.WorldACL(gozk.PERM_ALL))
+        gozk.WorldACL(gozk.PERM_ALL))
     c.Assert(err, IsNil)
 
     err = zk.Delete("/test", 5)
@@ -436,7 +436,7 @@ func (s *S) TestExistsWatchOnDataChange(c *C) {
     zk, _ := s.init(c)
 
     _, err := zk.Create("/test", "", gozk.EPHEMERAL,
-                        gozk.WorldACL(gozk.PERM_ALL))
+        gozk.WorldACL(gozk.PERM_ALL))
     c.Assert(err, IsNil)
 
     _, watch, err := zk.ExistsW("/test")
@@ -455,7 +455,7 @@ func (s *S) TestGetACL(c *C) {
     zk, _ := s.init(c)
 
     _, err := zk.Create("/test", "", gozk.EPHEMERAL,
-                        gozk.WorldACL(gozk.PERM_ALL))
+        gozk.WorldACL(gozk.PERM_ALL))
     c.Assert(err, IsNil)
 
     acl, stat, err := zk.GetACL("/test")
@@ -475,7 +475,7 @@ func (s *S) TestSetACL(c *C) {
     zk, _ := s.init(c)
 
     _, err := zk.Create("/test", "", gozk.EPHEMERAL,
-                        gozk.WorldACL(gozk.PERM_ALL))
+        gozk.WorldACL(gozk.PERM_ALL))
     c.Assert(err, IsNil)
 
     err = zk.SetACL("/test", gozk.WorldACL(gozk.PERM_ALL), 5)
@@ -494,7 +494,7 @@ func (s *S) TestAddAuth(c *C) {
     zk, _ := s.init(c)
 
     acl := []gozk.ACL{{gozk.PERM_READ, "digest",
-                       "joe:enQcM3mIEHQx7IrPNStYBc0qfs8="}}
+        "joe:enQcM3mIEHQx7IrPNStYBc0qfs8="}}
 
     _, err := zk.Create("/test", "", gozk.EPHEMERAL, acl)
     c.Assert(err, IsNil)

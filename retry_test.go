@@ -1,7 +1,7 @@
 package gozk_test
 
 import (
-    . "gocheck"
+    .   "gocheck"
     "gozk"
     "os"
 )
@@ -11,11 +11,11 @@ func (s *S) TestRetryChangeCreating(c *C) {
     zk, _ := s.init(c)
 
     err := zk.RetryChange("/test", gozk.EPHEMERAL, gozk.WorldACL(gozk.PERM_ALL),
-                          func(data string, stat gozk.Stat) (string, os.Error) {
-                               c.Assert(data, Equals, "")
-                               c.Assert(stat, IsNil)
-                               return "new", nil
-                          })
+        func(data string, stat gozk.Stat) (string, os.Error) {
+            c.Assert(data, Equals, "")
+            c.Assert(stat, IsNil)
+            return "new", nil
+        })
     c.Assert(err, IsNil)
 
     data, stat, err := zk.Get("/test")
@@ -33,16 +33,16 @@ func (s *S) TestRetryChangeSetting(c *C) {
     zk, _ := s.init(c)
 
     _, err := zk.Create("/test", "old", gozk.EPHEMERAL,
-                        gozk.WorldACL(gozk.PERM_ALL))
+        gozk.WorldACL(gozk.PERM_ALL))
     c.Assert(err, IsNil)
 
     err = zk.RetryChange("/test", gozk.EPHEMERAL, []gozk.ACL{},
-                         func(data string, stat gozk.Stat) (string, os.Error) {
-                              c.Assert(data, Equals, "old")
-                              c.Assert(stat, NotNil)
-                              c.Assert(stat.Version(), Equals, int32(0))
-                              return "brand new", nil
-                         })
+        func(data string, stat gozk.Stat) (string, os.Error) {
+            c.Assert(data, Equals, "old")
+            c.Assert(stat, NotNil)
+            c.Assert(stat.Version(), Equals, int32(0))
+            return "brand new", nil
+        })
     c.Assert(err, IsNil)
 
     data, stat, err := zk.Get("/test")
@@ -61,16 +61,16 @@ func (s *S) TestRetryChangeUnchangedValueDoesNothing(c *C) {
     zk, _ := s.init(c)
 
     _, err := zk.Create("/test", "old", gozk.EPHEMERAL,
-                        gozk.WorldACL(gozk.PERM_ALL))
+        gozk.WorldACL(gozk.PERM_ALL))
     c.Assert(err, IsNil)
 
     err = zk.RetryChange("/test", gozk.EPHEMERAL, []gozk.ACL{},
-                         func(data string, stat gozk.Stat) (string, os.Error) {
-                              c.Assert(data, Equals, "old")
-                              c.Assert(stat, NotNil)
-                              c.Assert(stat.Version(), Equals, int32(0))
-                              return "old", nil
-                         })
+        func(data string, stat gozk.Stat) (string, os.Error) {
+            c.Assert(data, Equals, "old")
+            c.Assert(stat, NotNil)
+            c.Assert(stat.Version(), Equals, int32(0))
+            return "old", nil
+        })
     c.Assert(err, IsNil)
 
     data, stat, err := zk.Get("/test")
@@ -85,24 +85,24 @@ func (s *S) TestRetryChangeConflictOnCreate(c *C) {
 
     changeFunc := func(data string, stat gozk.Stat) (string, os.Error) {
         switch data {
-            case "":
-                c.Assert(stat, IsNil)
-                _, err := zk.Create("/test", "conflict", gozk.EPHEMERAL,
-                                    gozk.WorldACL(gozk.PERM_ALL))
-                c.Assert(err, IsNil)
-                return "<none> => conflict", nil
-            case "conflict":
-                c.Assert(stat, NotNil)
-                c.Assert(stat.Version(), Equals, int32(0))
-                return "conflict => new", nil
-            default:
-                c.Fatal("Unexpected node data: " + data)
+        case "":
+            c.Assert(stat, IsNil)
+            _, err := zk.Create("/test", "conflict", gozk.EPHEMERAL,
+                gozk.WorldACL(gozk.PERM_ALL))
+            c.Assert(err, IsNil)
+            return "<none> => conflict", nil
+        case "conflict":
+            c.Assert(stat, NotNil)
+            c.Assert(stat.Version(), Equals, int32(0))
+            return "conflict => new", nil
+        default:
+            c.Fatal("Unexpected node data: " + data)
         }
         return "can't happen", nil
     }
 
     err := zk.RetryChange("/test", gozk.EPHEMERAL, gozk.WorldACL(gozk.PERM_ALL),
-                          changeFunc)
+        changeFunc)
     c.Assert(err, IsNil)
 
     data, stat, err := zk.Get("/test")
@@ -116,23 +116,23 @@ func (s *S) TestRetryChangeConflictOnSetDueToChange(c *C) {
     zk, _ := s.init(c)
 
     _, err := zk.Create("/test", "old", gozk.EPHEMERAL,
-                        gozk.WorldACL(gozk.PERM_ALL))
+        gozk.WorldACL(gozk.PERM_ALL))
     c.Assert(err, IsNil)
 
     changeFunc := func(data string, stat gozk.Stat) (string, os.Error) {
         switch data {
-            case "old":
-                c.Assert(stat, NotNil)
-                c.Assert(stat.Version(), Equals, int32(0))
-                _, err := zk.Set("/test", "conflict", 0)
-                c.Assert(err, IsNil)
-                return "old => new", nil
-            case "conflict":
-                c.Assert(stat, NotNil)
-                c.Assert(stat.Version(), Equals, int32(1))
-                return "conflict => new", nil
-            default:
-                c.Fatal("Unexpected node data: " + data)
+        case "old":
+            c.Assert(stat, NotNil)
+            c.Assert(stat.Version(), Equals, int32(0))
+            _, err := zk.Set("/test", "conflict", 0)
+            c.Assert(err, IsNil)
+            return "old => new", nil
+        case "conflict":
+            c.Assert(stat, NotNil)
+            c.Assert(stat.Version(), Equals, int32(1))
+            return "conflict => new", nil
+        default:
+            c.Fatal("Unexpected node data: " + data)
         }
         return "can't happen", nil
     }
@@ -151,28 +151,28 @@ func (s *S) TestRetryChangeConflictOnSetDueToDelete(c *C) {
     zk, _ := s.init(c)
 
     _, err := zk.Create("/test", "old", gozk.EPHEMERAL,
-                        gozk.WorldACL(gozk.PERM_ALL))
+        gozk.WorldACL(gozk.PERM_ALL))
     c.Assert(err, IsNil)
 
     changeFunc := func(data string, stat gozk.Stat) (string, os.Error) {
         switch data {
-            case "old":
-                c.Assert(stat, NotNil)
-                c.Assert(stat.Version(), Equals, int32(0))
-                err := zk.Delete("/test", 0)
-                c.Assert(err, IsNil)
-                return "old => <deleted>", nil
-            case "":
-                c.Assert(stat, IsNil)
-                return "<deleted> => new", nil
-            default:
-                c.Fatal("Unexpected node data: " + data)
+        case "old":
+            c.Assert(stat, NotNil)
+            c.Assert(stat.Version(), Equals, int32(0))
+            err := zk.Delete("/test", 0)
+            c.Assert(err, IsNil)
+            return "old => <deleted>", nil
+        case "":
+            c.Assert(stat, IsNil)
+            return "<deleted> => new", nil
+        default:
+            c.Fatal("Unexpected node data: " + data)
         }
         return "can't happen", nil
     }
 
     err = zk.RetryChange("/test", gozk.EPHEMERAL, gozk.WorldACL(gozk.PERM_READ),
-                         changeFunc)
+        changeFunc)
     c.Assert(err, IsNil)
 
     data, stat, err := zk.Get("/test")
@@ -191,9 +191,9 @@ func (s *S) TestRetryChangeErrorInCallback(c *C) {
     zk, _ := s.init(c)
 
     err := zk.RetryChange("/test", gozk.EPHEMERAL, gozk.WorldACL(gozk.PERM_ALL),
-                          func(data string, stat gozk.Stat) (string, os.Error) {
-                               return "don't use this", os.NewError("BOOM!")
-                          })
+        func(data string, stat gozk.Stat) (string, os.Error) {
+            return "don't use this", os.NewError("BOOM!")
+        })
     c.Assert(err, NotNil)
     c.Assert(err.Code(), Equals, gozk.ZSYSTEMERROR)
     c.Assert(err.String(), Equals, "BOOM!")
@@ -207,15 +207,15 @@ func (s *S) TestRetryChangeFailsReading(c *C) {
     zk, _ := s.init(c)
 
     _, err := zk.Create("/test", "old", gozk.EPHEMERAL,
-                        gozk.WorldACL(gozk.PERM_WRITE)) // Write only!
+        gozk.WorldACL(gozk.PERM_WRITE)) // Write only!
     c.Assert(err, IsNil)
 
     var called bool
     err = zk.RetryChange("/test", gozk.EPHEMERAL, gozk.WorldACL(gozk.PERM_ALL),
-                         func(data string, stat gozk.Stat) (string, os.Error) {
-                              called = true
-                              return "", nil
-                         })
+        func(data string, stat gozk.Stat) (string, os.Error) {
+            called = true
+            return "", nil
+        })
     c.Assert(err, NotNil)
     c.Assert(err.Code(), Equals, gozk.ZNOAUTH)
 
@@ -231,15 +231,15 @@ func (s *S) TestRetryChangeFailsSetting(c *C) {
     zk, _ := s.init(c)
 
     _, err := zk.Create("/test", "old", gozk.EPHEMERAL,
-                        gozk.WorldACL(gozk.PERM_READ)) // Read only!
+        gozk.WorldACL(gozk.PERM_READ)) // Read only!
     c.Assert(err, IsNil)
 
     var called bool
     err = zk.RetryChange("/test", gozk.EPHEMERAL, gozk.WorldACL(gozk.PERM_ALL),
-                         func(data string, stat gozk.Stat) (string, os.Error) {
-                              called = true
-                              return "", nil
-                         })
+        func(data string, stat gozk.Stat) (string, os.Error) {
+            called = true
+            return "", nil
+        })
     c.Assert(err, NotNil)
     c.Assert(err.Code(), Equals, gozk.ZNOAUTH)
 
@@ -255,16 +255,16 @@ func (s *S) TestRetryChangeFailsCreating(c *C) {
     zk, _ := s.init(c)
 
     _, err := zk.Create("/test", "old", gozk.EPHEMERAL,
-                        gozk.WorldACL(gozk.PERM_READ)) // Read only!
+        gozk.WorldACL(gozk.PERM_READ)) // Read only!
     c.Assert(err, IsNil)
 
     var called bool
     err = zk.RetryChange("/test/sub", gozk.EPHEMERAL,
-                         gozk.WorldACL(gozk.PERM_ALL),
-                         func(data string, stat gozk.Stat) (string, os.Error) {
-                              called = true
-                              return "", nil
-                         })
+        gozk.WorldACL(gozk.PERM_ALL),
+        func(data string, stat gozk.Stat) (string, os.Error) {
+            called = true
+            return "", nil
+        })
     c.Assert(err, NotNil)
     c.Assert(err.Code(), Equals, gozk.ZNOAUTH)
 
@@ -274,4 +274,3 @@ func (s *S) TestRetryChangeFailsCreating(c *C) {
 
     c.Assert(called, Equals, true)
 }
-
