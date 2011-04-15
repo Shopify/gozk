@@ -50,8 +50,7 @@ endif
 
 CLEANFILES+=_lib
 
-GOFMT=gofmt -spaces=true -tabwidth=4 -tabindent=false
-
+GOFMT=gofmt
 BADFMT:=$(shell $(GOFMT) -l $(GOFILES) $(CGOFILES) $(wildcard *_test.go))
 
 gofmt: $(BADFMT)
