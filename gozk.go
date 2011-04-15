@@ -928,26 +928,25 @@ func _watchLoop() {
         // This will block until there's a watch available.
         data := C.wait_for_watch()
 
-        event := Event{Type: int(data.event_type),
+        event := Event{
+            Type:  int(data.event_type),
             Path:  C.GoString(data.event_path),
-            State: int(data.connection_state)}
+            State: int(data.connection_state),
+        }
 
         watchId := uintptr(data.watch_context)
         channel, closeAfter := getWatchForSend(watchId)
         if channel != nil {
-            sent := channel <- &event
-            if !sent {
+            select {
+            case channel <- &event:
+                // Sent!
+            case <-time.After(3e9):
                 // Channel is unavailable for sending, which means this is a
                 // session event and the application isn't attempting to
                 // receive it.  As an experimental way to attempt to enforce
                 // careful coding, for the moment we'll block until either
                 // the event is read, or a timeout+panic happens.
-                select {
-                case channel <- &event:
-                    // Sent!
-                case <-time.After(15e9):
-                    panic("Timeout sending critical event to watch channel")
-                }
+                panic("Timeout sending critical event to watch channel")
             }
             if closeAfter {
                 close(channel)

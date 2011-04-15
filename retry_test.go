@@ -1,7 +1,7 @@
 package gozk_test
 
 import (
-    .   "gocheck"
+    . "launchpad.net/gocheck"
     "gozk"
     "os"
 )

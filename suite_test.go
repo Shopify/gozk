@@ -2,7 +2,7 @@ package gozk_test
 
 
 import (
-    .   "gocheck"
+    . "launchpad.net/gocheck"
     "testing"
     "io/ioutil"
     "path"
@@ -69,12 +69,19 @@ func (s *S) init(c *C) (*gozk.ZooKeeper, chan *gozk.Event) {
 
     s.liveWatches += 1
     go func() {
-        for !closed(watch) {
+    loop:
+        for {
             select {
-            case event := <-watch:
-                sent := bufferedWatch <- event
-                if !sent {
-                    panic("Too many events in buffered watch!")
+            case event, closed := <-watch:
+                if event != nil {
+                    select {
+                    case bufferedWatch <- event:
+                    default:
+                        panic("Too many events in buffered watch!")
+                    }
+                }
+                if closed {
+                    break loop
                 }
             }
         }
@@ -137,8 +144,8 @@ func (s *S) SetUpSuite(c *C) {
     s.zkAddr = fmt.Sprintf("localhost:%d", s.zkTestPort)
 
     s.zkServerSh = path.Join(s.zkRoot, "bin/zkServer.sh")
-    s.zkServerOut, err = os.Open(path.Join(s.zkTestRoot, "stdout.txt"),
-        os.O_CREAT|os.O_WRONLY|os.O_APPEND, 0644)
+    s.zkServerOut, err = os.OpenFile(path.Join(s.zkTestRoot, "stdout.txt"),
+        os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
     if err != nil {
         panic("Can't open stdout.txt file for server: " + err.String())
     }
@@ -161,20 +168,18 @@ func (s *S) SetUpSuite(c *C) {
     }
 
     log4jPrp := []byte(testLog4jPrp)
-    err = ioutil.WriteFile(path.Join(confDir, "log4j.properties"),
-        log4jPrp, 0644)
+    err = ioutil.WriteFile(path.Join(confDir, "log4j.properties"), log4jPrp, 0644)
     if err != nil {
         panic("Can't write log4j.properties: " + err.String())
     }
 
-    pid, err := os.ForkExec(s.zkServerSh, []string{s.zkServerSh, "start"},
-        os.Environ(), "",
-        []*os.File{os.Stdin, s.zkServerOut, os.Stderr})
+    attr := os.ProcAttr{Files: []*os.File{os.Stdin, s.zkServerOut, os.Stderr}}
+    proc, err := os.StartProcess(s.zkServerSh, []string{s.zkServerSh, "start"}, &attr)
     if err != nil {
         panic("Problem executing zkServer.sh start: " + err.String())
     }
 
-    result, err := os.Wait(pid, 0)
+    result, err := proc.Wait(0)
     if err != nil {
         panic(err.String())
     } else if result.ExitStatus() != 0 {
@@ -184,15 +189,14 @@ func (s *S) SetUpSuite(c *C) {
 
 func (s *S) TearDownSuite(c *C) {
     var err os.Error
-    pid, err := os.ForkExec(s.zkServerSh, []string{s.zkServerSh, "stop"},
-        os.Environ(), "",
-        []*os.File{os.Stdin, s.zkServerOut, os.Stderr})
+    attr := os.ProcAttr{Files: []*os.File{os.Stdin, s.zkServerOut, os.Stderr}}
+    proc, err := os.StartProcess(s.zkServerSh, []string{s.zkServerSh, "stop"}, &attr)
     s.zkServerOut.Close()
     if err != nil {
         panic("Problem executing zkServer.sh stop: " + err.String() +
             " (look for runaway java processes!)")
     }
-    result, err := os.Wait(pid, 0)
+    result, err := proc.Wait(0)
     if err != nil {
         panic(err.String())
     } else if result.ExitStatus() != 0 {

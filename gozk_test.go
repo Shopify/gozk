@@ -2,7 +2,7 @@ package gozk_test
 
 
 import (
-    .   "gocheck"
+    . "launchpad.net/gocheck"
     "gozk"
 )
 
@@ -15,8 +15,11 @@ func (s *S) TestInitErrorThroughErrno(c *C) {
     }
     if watch != nil {
         go func() {
-            for !closed(watch) {
-                <-watch
+            for {
+                _, closed := <-watch
+                if closed {
+                    break
+                }
             }
         }()
     }
@@ -30,8 +33,11 @@ func (s *S) TestRecvTimeoutInitParameter(c *C) {
     c.Assert(err, IsNil)
     defer zk.Close()
 
-    _, ok := <-watch
-    c.Assert(ok, Equals, false)
+    select {
+    case <-watch:
+        c.Fatal("Watch fired")
+    default:
+    }
 
     for i := 0; i != 1000; i++ {
         _, _, err := zk.Get("/zookeeper")
@@ -86,14 +92,14 @@ func (s *S) TestSessionWatches(c *C) {
 // Hopefully this procedure will avoid some nil-pointer references by
 // mistake.
 func (s *S) TestInjectedClosingStateInSessionWatch(c *C) {
-    zk, watch1 := s.init(c)
+    zk, watch := s.init(c)
 
-    event := <-watch1
+    event := <-watch
     c.Assert(event.Type, Equals, gozk.EVENT_SESSION)
     c.Assert(event.State, Equals, gozk.STATE_CONNECTED)
 
     zk.Close()
-    event = <-watch1
+    event = <-watch
     c.Assert(event, NotNil)
     c.Assert(event.Type, Equals, gozk.EVENT_SESSION)
     c.Assert(event.State, Equals, gozk.STATE_CLOSED)
@@ -178,8 +184,11 @@ func (s *S) TestGetAndWatch(c *C) {
     c.Assert(data, Equals, "one")
     c.Assert(stat.Version(), Equals, int32(0))
 
-    _, ok := <-watch
-    c.Assert(ok, Equals, false)
+    select {
+    case <-watch:
+        c.Fatal("Watch fired")
+    default:
+    }
 
     c.Check(gozk.CountPendingWatches(), Equals, 2)
 
@@ -195,8 +204,11 @@ func (s *S) TestGetAndWatch(c *C) {
     c.Assert(err, IsNil)
     c.Assert(data, Equals, "two")
 
-    _, ok = <-watch
-    c.Assert(ok, Equals, false)
+    select {
+    case <-watch:
+        c.Fatal("Watch fired")
+    default:
+    }
 
     c.Check(gozk.CountPendingWatches(), Equals, 2)
 
@@ -283,8 +295,11 @@ func (s *S) TestGetChildrenAndWatch(c *C) {
     c.Assert(children, Equals, []string{"zookeeper"})
     c.Assert(stat.NumChildren(), Equals, int32(1))
 
-    _, ok := <-watch
-    c.Assert(ok, Equals, false)
+    select {
+    case <-watch:
+        c.Fatal("Watch fired")
+    default:
+    }
 
     c.Check(gozk.CountPendingWatches(), Equals, 2)
 
@@ -305,8 +320,11 @@ func (s *S) TestGetChildrenAndWatch(c *C) {
     // The ordering is most likely unstable, so this test must be fixed.
     c.Assert(children, Equals, []string{"test1", "zookeeper"})
 
-    _, ok = <-watch
-    c.Assert(ok, Equals, false)
+    select {
+    case <-watch:
+        c.Fatal("Watch fired")
+    default:
+    }
 
     c.Check(gozk.CountPendingWatches(), Equals, 2)
 
@@ -361,11 +379,13 @@ func (s *S) TestExistsAndWatch(c *C) {
 
     c.Check(gozk.CountPendingWatches(), Equals, 2)
 
-    _, ok := <-watch
-    c.Assert(ok, Equals, false)
+    select {
+    case <-watch:
+        c.Fatal("Watch fired")
+    default:
+    }
 
-    _, err = zk.Create("/test", "", gozk.EPHEMERAL,
-        gozk.WorldACL(gozk.PERM_ALL))
+    _, err = zk.Create("/test", "", gozk.EPHEMERAL, gozk.WorldACL(gozk.PERM_ALL))
     c.Assert(err, IsNil)
 
     event := <-watch
