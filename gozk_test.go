@@ -16,8 +16,8 @@ func (s *S) TestInitErrorThroughErrno(c *C) {
 	if watch != nil {
 		go func() {
 			for {
-				_, closed := <-watch
-				if closed {
+				_, ok := <-watch
+				if !ok {
 					break
 				}
 			}

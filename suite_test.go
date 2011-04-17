@@ -72,16 +72,16 @@ func (s *S) init(c *C) (*gozk.ZooKeeper, chan *gozk.Event) {
 	loop:
 		for {
 			select {
-			case event, closed := <-watch:
+			case event, ok := <-watch:
+				if !ok {
+					break loop
+				}
 				if event != nil {
 					select {
 					case bufferedWatch <- event:
 					default:
 						panic("Too many events in buffered watch!")
 					}
-				}
-				if closed {
-					break loop
 				}
 			}
 		}
