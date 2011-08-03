@@ -17,12 +17,10 @@ CGO_CFLAGS+=-I$(ZKROOT)/src/c/include -I$(ZKROOT)/src/c/generated
 CGO_LDFLAGS+=-L$(LIBDIR)
 else
 LIBDIR=/usr/lib
-CGO_CFLAGS+=-I/usr/include/zookeeper
 endif
 
-ifndef STATIC
-CGO_LDFLAGS+=-lzookeeper_mt
-else
+# For static compilation, will have to take LDFLAGS out of gozk.go too.
+ifdef STATIC
 CGO_LDFLAGS+=-lm -lpthread
 # XXX This has ordering issues with current Make.pkg:
 #CGO_OFILES+=$(wildcard _lib/*.o)

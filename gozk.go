@@ -11,6 +11,7 @@ package gozk
 
 /*
 #cgo CFLAGS: -I/usr/include/c-client-src
+#cgo LDFLAGS: -lzookeeper_mt
 
 #include <zookeeper.h>
 #include "helpers.h"
