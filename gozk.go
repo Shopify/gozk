@@ -10,6 +10,8 @@
 package gozk
 
 /*
+#cgo CFLAGS: -I/usr/include/c-client-src
+
 #include <zookeeper.h>
 #include "helpers.h"
 */
@@ -490,7 +492,7 @@ func parseStringVector(cvector *C.struct_String_vector) []string {
 	dataStart := uintptr(unsafe.Pointer(cvector.data))
 	uintptrSize := unsafe.Sizeof(dataStart)
 	for i := 0; i != len(vector); i++ {
-		cpathPos := dataStart + uintptr(i*uintptrSize)
+		cpathPos := dataStart + uintptr(i)*uintptrSize
 		cpath := *(**C.char)(unsafe.Pointer(cpathPos))
 		vector[i] = C.GoString(cpath)
 	}
@@ -697,7 +699,7 @@ func parseACLVector(caclv *C.struct_ACL_vector) []ACL {
 	aclv := make([]ACL, caclv.count)
 	dataStart := uintptr(unsafe.Pointer(caclv.data))
 	for i := 0; i != int(caclv.count); i++ {
-		caclPos := dataStart + uintptr(i*structACLSize)
+		caclPos := dataStart + uintptr(i)*structACLSize
 		cacl := (*C.struct_ACL)(unsafe.Pointer(caclPos))
 
 		acl := &aclv[i]
@@ -723,7 +725,7 @@ func buildACLVector(aclv []ACL) *C.struct_ACL_vector {
 
 	dataStart := uintptr(unsafe.Pointer(caclv.data))
 	for i, acl := range aclv {
-		caclPos := dataStart + uintptr(i*structACLSize)
+		caclPos := dataStart + uintptr(i)*structACLSize
 		cacl := (*C.struct_ACL)(unsafe.Pointer(caclPos))
 		cacl.perms = C.int32_t(acl.Perms)
 		// C.deallocate_ACL_vector() will also handle deallocation of these.

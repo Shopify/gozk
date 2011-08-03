@@ -20,7 +20,7 @@ func main() {
         return
     }
 
-    _, err := zk.Create("/counter", "0", 0, gozk.WorldACL(gozk.PERM_ALL))
+    _, err = zk.Create("/counter", "0", 0, gozk.WorldACL(gozk.PERM_ALL))
     if err != nil {
         println(err.String())
     } else {
