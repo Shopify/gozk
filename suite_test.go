@@ -49,7 +49,7 @@ var testLog4jPrp = ("log4j.rootLogger=INFO,CONSOLE\n" +
 	"")
 
 func (s *S) init(c *C) (*gozk.ZooKeeper, chan gozk.Event) {
-	zk, watch, err := gozk.Init(s.zkAddr, 5000)
+	zk, watch, err := gozk.Init(s.zkAddr, 5e9)
 	c.Assert(err, IsNil)
 
 	s.handles = append(s.handles, zk)
@@ -69,6 +69,7 @@ func (s *S) init(c *C) (*gozk.ZooKeeper, chan gozk.Event) {
 			select {
 			case event, ok := <-watch:
 				if !ok {
+					close(bufferedWatch)
 					break loop
 				}
 				select {

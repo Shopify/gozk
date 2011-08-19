@@ -9,7 +9,7 @@ import (
 // This error will be delivered via C errno, since ZK unfortunately
 // only provides the handler back from zookeeper_init().
 func (s *S) TestInitErrorThroughErrno(c *C) {
-	zk, watch, err := gozk.Init("bad-domain-without-port", 5000)
+	zk, watch, err := gozk.Init("bad-domain-without-port", 5e9)
 	if zk != nil {
 		zk.Close()
 	}
@@ -91,7 +91,7 @@ func (s *S) TestSessionWatches(c *C) {
 // know that a nil pointer is coming, and to stop the procedure.
 // Hopefully this procedure will avoid some nil-pointer references by
 // mistake.
-func (s *S) TestInjectedClosingStateInSessionWatch(c *C) {
+func (s *S) TestClosingStateInSessionWatch(c *C) {
 	zk, watch := s.init(c)
 
 	event := <-watch
@@ -99,9 +99,9 @@ func (s *S) TestInjectedClosingStateInSessionWatch(c *C) {
 	c.Assert(event.State, Equals, gozk.STATE_CONNECTED)
 
 	zk.Close()
-	event = <-watch
-	c.Assert(event, NotNil)
-	c.Assert(event.Type, Equals, gozk.EVENT_SESSION)
+	event, ok := <-watch
+	c.Assert(ok, Equals, false)
+	c.Assert(event.Type, Equals, gozk.EVENT_CLOSED)
 	c.Assert(event.State, Equals, gozk.STATE_CLOSED)
 }
 
@@ -407,7 +407,6 @@ func (s *S) TestExistsAndWatch(c *C) {
 	c.Assert(err, IsNil)
 
 	event := <-watch
-	c.Assert(event, NotNil)
 	c.Assert(event.Type, Equals, gozk.EVENT_CREATED)
 	c.Assert(event.Path, Equals, "/test")
 
@@ -459,7 +458,7 @@ func (s *S) TestGetClientIdAndReInit(c *C) {
 	zk1, _ := s.init(c)
 	clientId1 := zk1.GetClientId()
 
-	zk2, _, err := gozk.ReInit(s.zkAddr, 5000, clientId1)
+	zk2, _, err := gozk.ReInit(s.zkAddr, 5e9, clientId1)
 	c.Assert(err, IsNil)
 	defer zk2.Close()
 	clientId2 := zk2.GetClientId()
@@ -527,8 +526,7 @@ func (s *S) TestSetACL(c *C) {
 func (s *S) TestAddAuth(c *C) {
 	zk, _ := s.init(c)
 
-	acl := []gozk.ACL{{gozk.PERM_READ, "digest",
-		"joe:enQcM3mIEHQx7IrPNStYBc0qfs8="}}
+	acl := []gozk.ACL{{gozk.PERM_READ, "digest", "joe:enQcM3mIEHQx7IrPNStYBc0qfs8="}}
 
 	_, err := zk.Create("/test", "", gozk.EPHEMERAL, acl)
 	c.Assert(err, IsNil)
@@ -591,7 +589,6 @@ func (s *S) TestWatchOnReconnection(c *C) {
 	c.Assert(err, IsNil)
 
 	event = <-watch
-	c.Assert(event, NotNil)
 	c.Assert(event.Type, Equals, gozk.EVENT_CREATED)
 	c.Assert(event.Path, Equals, "/test")
 
@@ -617,7 +614,7 @@ func (s *S) TestWatchOnSessionExpiration(c *C) {
 
 	// Use expiration trick described in the FAQ.
 	clientId := zk.GetClientId()
-	zk2, session2, err := gozk.ReInit(s.zkAddr, 5000, clientId)
+	zk2, session2, err := gozk.ReInit(s.zkAddr, 5e9, clientId)
 
 	for event := range session2 {
 		c.Log("Event from overlapping session: ", event)
@@ -643,8 +640,7 @@ func (s *S) TestWatchOnSessionExpiration(c *C) {
 	}
 
 	event = <-watch
-	c.Assert(event, NotNil)
-	c.Assert(event.Type, Equals, gozk.EVENT_SESSION)
+	c.Assert(event.Type, Equals, gozk.EVENT_CLOSED)
 	c.Assert(event.State, Equals, gozk.STATE_CLOSED)
 
 	c.Check(gozk.CountPendingWatches(), Equals, 1)

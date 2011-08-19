@@ -1,4 +1,3 @@
-
 // gozk - Zookeeper support for the Go language
 //
 //   https://wiki.ubuntu.com/gozk
@@ -90,7 +89,9 @@ type ACL struct {
 //         return
 //     }
 //
-// 
+// Note that every channel will receive an additional event with
+// State set to STATE_CLOSED before the channel is closed, to
+// facilitate handling.
 type Event struct {
 	Type  int
 	Path  string
@@ -162,6 +163,10 @@ const (
 	EVENT_CHILD
 	EVENT_SESSION     = -1
 	EVENT_NOTWATCHING = -2
+
+	// Doesn't really exist in zk, but handy for use in zeroed Event
+	// values (e.g. closed channels).
+	EVENT_CLOSED = 0
 )
 
 // Constants for Event State.
@@ -172,13 +177,9 @@ const (
 	STATE_ASSOCIATING     = 2
 	STATE_CONNECTED       = 3
 
-	// gozk injects a STATE_CLOSED event when zk.Close() is called, right
-	// before the channel is closed.  Closing the channel injects a nil
-	// pointer, as usual for Go, so the STATE_CLOSED gives a chance to
-	// know that a nil pointer is coming, and to stop the procedure.
-	// Hopefully this procedure will avoid some nil-pointer references
-	// by mistake.
-	STATE_CLOSED = -99999
+	// Doesn't really exist in zk, but handy for use in zeroed Event
+	// values (e.g. closed channels).
+	STATE_CLOSED = 0
 )
 
 func init() {
@@ -397,19 +398,19 @@ func SetLogLevel(level int) {
 // The watch channel receives events of type SESSION_EVENT when any change
 // to the state of the established connection happens.  See the documentation
 // for the Event type for more details.
-func Init(servers string, recvTimeoutNS int) (zk *ZooKeeper, watch chan Event, err Error) {
+func Init(servers string, recvTimeoutNS int64) (zk *ZooKeeper, watch chan Event, err Error) {
 	zk, watch, err = internalInit(servers, recvTimeoutNS, nil)
 	return
 }
 
 // Equivalent to Init, but attempt to reestablish an existing session
 // identified via the clientId parameter.
-func ReInit(servers string, recvTimeoutNS int, clientId *ClientId) (zk *ZooKeeper, watch chan Event, err Error) {
+func ReInit(servers string, recvTimeoutNS int64, clientId *ClientId) (zk *ZooKeeper, watch chan Event, err Error) {
 	zk, watch, err = internalInit(servers, recvTimeoutNS, clientId)
 	return
 }
 
-func internalInit(servers string, recvTimeoutNS int, clientId *ClientId) (*ZooKeeper, chan Event, Error) {
+func internalInit(servers string, recvTimeoutNS int64, clientId *ClientId) (*ZooKeeper, chan Event, Error) {
 
 	zk := &ZooKeeper{}
 	zk.watchChannels = make(map[uintptr]chan Event)
@@ -435,7 +436,7 @@ func internalInit(servers string, recvTimeoutNS int, clientId *ClientId) (*ZooKe
 }
 
 // GetClientId returns the client ID for the existing session with ZooKeeper.
-// This is useful to reestablish an existing session via ReInit().
+// This is useful to reestablish an existing session via ReInit.
 func (zk *ZooKeeper) GetClientId() *ClientId {
 	return &ClientId{*C.zoo_client_id(zk.handle)}
 }
@@ -893,7 +894,7 @@ func (zk *ZooKeeper) RetryChange(path string, flags int, acl []ACL, changeFunc C
 // yet provide a nice way to callback from C into a Go routine, so we do
 // this by hand.  That bridging works the following way:
 //
-// Whenever a *W() method is called, it will return a channel which
+// Whenever a *W method is called, it will return a channel which
 // outputs Event values.  Internally, a map is used to maintain references
 // between an unique integer key (the watchId), and the event channel. The
 // watchId is then handed to the C zookeeper library as the watch context,
@@ -907,7 +908,7 @@ func (zk *ZooKeeper) RetryChange(path string, flags int, acl []ACL, changeFunc C
 // lies in the other side of this logic, when events actually happen.
 //
 // Since Cgo doesn't allow calling back into Go, we actually fire a new
-// goroutine the very first time Init() is called, and allow it to block
+// goroutine the very first time Init is called, and allow it to block
 // in a pthread condition variable within a C function. This condition
 // will only be notified once a zookeeper watch callback appends new
 // entries to the event list.  When this happens, the C function returns
@@ -932,7 +933,7 @@ func CountPendingWatches() int {
 // createWatch creates and registers a watch, returning the watch id
 // and channel.
 func (zk *ZooKeeper) createWatch(session bool) (watchId uintptr, watchChannel chan Event) {
-	buf := 2 // session/watch event + closed event
+	buf := 1 // session/watch event
 	if session {
 		buf = 32
 	}
@@ -957,38 +958,33 @@ func (zk *ZooKeeper) forgetWatch(watchId uintptr) {
 	watchZooKeepers[watchId] = nil, false
 }
 
-var closedEvent = Event{Type: EVENT_SESSION, State: STATE_CLOSED}
-
 // closeAllWatches closes all watch channels for zk.
 func (zk *ZooKeeper) closeAllWatches() {
 	watchMutex.Lock()
 	defer watchMutex.Unlock()
-	for watchId, _ := range zk.watchChannels {
-		sendEventUnlocked(watchId, closedEvent)
+	for watchId, ch := range zk.watchChannels {
+		close(ch)
+		zk.watchChannels[watchId] = nil, false
+		watchZooKeepers[watchId] = nil, false
 	}
 }
 
-// sendEvent calls sendEventUnlocked with watchMutex acquired.
+// sendEvent delivers the event to the watchId event channel.  If the
+// event channel is a watch event channel, the event is delivered,
+// the channel is closed, and resources are freed.
 func sendEvent(watchId uintptr, event Event) {
+	if event.State == STATE_CLOSED {
+		panic("Attempted to send a CLOSED event")
+	}
 	watchMutex.Lock()
 	defer watchMutex.Unlock()
-	sendEventUnlocked(watchId, event)
-}
-
-// sendEventUnlocked delivers the event to the watchId event channel.
-// If the event channel is a watch event channel, and the event is
-// about the watch (rather than a session event), an additional
-// STATE_CLOSED event is queued.  In that situation or when a closed
-// event is explicitly delivered, the resources for the channel are
-// freed.
-func sendEventUnlocked(watchId uintptr, event Event) {
 	zk, ok := watchZooKeepers[watchId]
 	if !ok {
 		return
 	}
 	if event.Type == EVENT_SESSION && watchId != zk.sessionWatchId {
 		switch event.State {
-		case STATE_EXPIRED_SESSION, STATE_AUTH_FAILED, STATE_CLOSED:
+		case STATE_EXPIRED_SESSION, STATE_AUTH_FAILED:
 		default:
 			// WTF? Feels like TCP saying "dropped a dup packet, ok?"
 			return
@@ -1012,16 +1008,7 @@ func sendEventUnlocked(watchId uintptr, event Event) {
 			panic("Watch event channel buffer is full")
 		}
 	}
-	if event.State != STATE_CLOSED && watchId != zk.sessionWatchId {
-		// Watch channel did its job. Terminate it.
-		select {
-		case ch <- closedEvent:
-		default:
-			panic("Watch event channel buffer is full")
-		}
-		event = closedEvent
-	}
-	if event.State == STATE_CLOSED {
+	if watchId != zk.sessionWatchId {
 		zk.watchChannels[watchId] = nil, false
 		watchZooKeepers[watchId] = nil, false
 		close(ch)
