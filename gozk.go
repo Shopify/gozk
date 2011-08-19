@@ -89,9 +89,9 @@ type ACL struct {
 //         return
 //     }
 //
-// Note that every channel will receive an additional event with
-// State set to STATE_CLOSED before the channel is closed, to
-// facilitate handling.
+// Note that closed channels will deliver zeroed Event, which means
+// event.Type is set to EVENT_CLOSED and event.State is set to STATE_CLOSED,
+// to facilitate handling.
 type Event struct {
 	Type  int
 	Path  string
