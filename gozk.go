@@ -1,4 +1,4 @@
-//
+
 // gozk - Zookeeper support for the Go language
 //
 //   https://wiki.ubuntu.com/gozk
@@ -19,48 +19,86 @@ package gozk
 import "C"
 
 import (
+	"fmt"
 	"unsafe"
 	"sync"
-	"time"
 	"os"
 )
-
 
 // -----------------------------------------------------------------------
 // Main constants and data types.
 
 // The main ZooKeeper object, created through the Init() function.
+// Encapsulates all communication with ZooKeeper.
 type ZooKeeper struct {
-	watchChannels  map[uintptr]chan *Event
+	watchChannels  map[uintptr]chan Event
 	sessionWatchId uintptr
 	handle         *C.zhandle_t
 	mutex          sync.Mutex
 }
 
-// Client id representing the established session in ZooKeeper.  This is only
+// ClientId represents the established session in ZooKeeper.  This is only
 // useful to be passed back into the ReInit() function.
 type ClientId struct {
 	cId C.clientid_t
 }
 
-// Access control list element, providing the permissions (one of PERM_*),
-// the scheme ("digest", etc), and the id (scheme-dependent) for the
-// access control mechanism in ZooKeeper.
+// ACL represents one access control list element, providing the permissions
+// (one of PERM_*), the scheme ("digest", etc), and the id (scheme-dependent)
+// for the access control mechanism in ZooKeeper.
 type ACL struct {
 	Perms  uint32
 	Scheme string
 	Id     string
 }
 
-// Event is the structure delivered through the watch channels.  It exposes
-// the event type (EVENT_*), the node path where the event took place, and
-// the current state of the ZooKeeper connection (STATE_*).
+// Event channels are used to provide notifications of changes in the
+// ZooKeeper connection state and in specific node aspects.
+// 
+// There are two sources of events: the session channel obtained during
+// initialization with gozk.Init, and any watch channels obtained
+// through one of the W-suffixed functions (GetW, ExistsW, etc).
+// 
+// The session channel will only receive session-level events notifying
+// about critical and transient changes in the ZooKeeper connection
+// state (STATE_CONNECTED, STATE_EXPIRED_SESSION, etc).  On long
+// running applications the session channel must *necessarily* be
+// observed since certain events like session expirations require an
+// explicit reconnection and reestablishment of state (or bailing out).
+// Because of that, the buffer used on the session channel has a limited
+// size, and a panic will occur if too many events are not collected.
+//
+// Watch channels enable monitoring state for nodes, and the
+// moment they're fired depends on which function was called to
+// create them.  Note that, unlike in other ZooKeeper interfaces,
+// gozk will NOT dispatch unimportant session events such as
+// STATE_ASSOCIATING, STATE_CONNECTING and STATE_CONNECTED to
+// watch Event channels, since they are transient and disruptive
+// to the workflow.  Critical state changes such as expirations
+// are still delivered to all event channels, though, and the
+// transient events may be obsererved in the session channel.
+//
+// Since every watch channel may receive critical session events, events
+// received must not be handled blindly as if the watch requested has
+// been fired.  To facilitate such tests, Events offer the Ok method,
+// and they also have a good String method so they may be used as an
+// os.Error value if wanted. E.g.:
+//
+//     event := <-watch
+//     if !event.Ok() {
+//         err = event
+//         return
+//     }
+//
+// 
 type Event struct {
 	Type  int
 	Path  string
 	State int
 }
 
+// Error codes that may be used to verify the result of the
+// Code method from Error.
 const (
 	ZOK                      = C.ZOK
 	ZSYSTEMERROR             = C.ZSYSTEMERROR
@@ -88,6 +126,7 @@ const (
 	ZSESSIONMOVED            = C.ZSESSIONMOVED
 )
 
+// Constants for SetLogLevel.
 const (
 	LOG_ERROR = C.ZOO_LOG_LEVEL_ERROR
 	LOG_WARN  = C.ZOO_LOG_LEVEL_WARN
@@ -96,14 +135,16 @@ const (
 )
 
 // These are defined as extern.  To avoid having to declare them as
-// variables here, we'll inline them here, and ensure correctness
-// on init().
+// variables here they are inlined, and correctness is ensured on
+// init().
 
+// Constants for Create's flags parameter.
 const (
 	EPHEMERAL = 1 << iota
 	SEQUENCE
 )
 
+// Constants for ACL Perms.
 const (
 	PERM_READ = 1 << iota
 	PERM_WRITE
@@ -113,6 +154,7 @@ const (
 	PERM_ALL = 0x1f
 )
 
+// Constants for Event Type.
 const (
 	EVENT_CREATED = iota + 1
 	EVENT_DELETED
@@ -122,6 +164,7 @@ const (
 	EVENT_NOTWATCHING = -2
 )
 
+// Constants for Event State.
 const (
 	STATE_EXPIRED_SESSION = -112
 	STATE_AUTH_FAILED     = -113
@@ -129,7 +172,7 @@ const (
 	STATE_ASSOCIATING     = 2
 	STATE_CONNECTED       = 3
 
-	// Gozk injects a STATE_CLOSED event when zk.Close() is called, right
+	// gozk injects a STATE_CLOSED event when zk.Close() is called, right
 	// before the channel is closed.  Closing the channel injects a nil
 	// pointer, as usual for Go, so the STATE_CLOSED gives a chance to
 	// know that a nil pointer is coming, and to stop the procedure.
@@ -163,20 +206,70 @@ func init() {
 	}
 }
 
-// Helper to produce an ACL list containing a single ACL which uses
+// AuthACL produces an ACL list containing a single ACL which uses
 // the provided permissions, with the scheme "auth", and ID "", which
 // is used by ZooKeeper to represent any authenticated user.
 func AuthACL(perms uint32) []ACL {
 	return []ACL{{perms, "auth", ""}}
 }
 
-// Helper to produce an ACL list containing a single ACL which uses
+// WorldACL produces an ACL list containing a single ACL which uses
 // the provided permissions, with the scheme "world", and ID "anyone",
 // which is used by ZooKeeper to represent any user at all.
 func WorldACL(perms uint32) []ACL {
 	return []ACL{{perms, "world", "anyone"}}
 }
 
+// -----------------------------------------------------------------------
+// Event methods.
+
+// Ok returns true in case the event reports zk as being in a usable state.
+func (e Event) Ok() bool {
+	// That's really it for now. Anything else seems to mean zk
+	// can't be used at the moment.
+	return e.State == STATE_CONNECTED
+}
+
+func (e Event) String() (s string) {
+	switch e.State {
+	case STATE_EXPIRED_SESSION:
+		s = "ZooKeeper session expired"
+	case STATE_AUTH_FAILED:
+		s = "ZooKeeper authentication failed"
+	case STATE_CONNECTING:
+		s = "ZooKeeper connecting"
+	case STATE_ASSOCIATING:
+		s = "ZooKeeper still associating"
+	case STATE_CONNECTED:
+		s = "ZooKeeper connected"
+	case STATE_CLOSED:
+		s = "ZooKeeper connection closed"
+	default:
+		s = fmt.Sprintf("unknown ZooKeeper state %d", e.State)
+	}
+	if e.Type == -1 || e.Type == EVENT_SESSION {
+		return
+	}
+	if s != "" {
+		s += "; "
+	}
+	switch e.Type {
+	case EVENT_CREATED:
+		s += "path created: "
+	case EVENT_DELETED:
+		s += "path deleted: "
+	case EVENT_CHANGED:
+		s += "path changed: "
+	case EVENT_CHILD:
+		s += "path children changed: "
+	case EVENT_NOTWATCHING:
+		s += "not watching: " // !?
+	case EVENT_SESSION:
+		// nothing
+	}
+	s += e.Path
+	return
+}
 
 // -----------------------------------------------------------------------
 // Error interface which maps onto the ZooKeeper error codes.
@@ -195,7 +288,6 @@ func newError(zkrc C.int, err os.Error) Error {
 	return &errorType{zkrc, err}
 }
 
-// Error message representing the error.
 func (error *errorType) String() (result string) {
 	if error.zkrc == ZSYSTEMERROR && error.err != nil {
 		result = error.err.String()
@@ -205,11 +297,11 @@ func (error *errorType) String() (result string) {
 	return
 }
 
-// The error code which may be compared against one of the gozk.Z* constants.
+// Code returns the error code that may be compared against one of
+// the gozk.Z* constants.
 func (error *errorType) Code() int {
 	return int(error.zkrc)
 }
-
 
 // -----------------------------------------------------------------------
 // Stat interface which maps onto the ZooKeeper Stat struct.
@@ -219,7 +311,7 @@ func (error *errorType) Code() int {
 // and the Go one on every call.  Most uses will only touch a few elements,
 // or even ignore the stat entirely, so that's a win.
 
-// Detailed meta information about a node.
+// Stat contains detailed information about a node.
 type Stat interface {
 	Czxid() int64
 	Mzxid() int64
@@ -280,19 +372,18 @@ func (stat *resultStat) Pzxid() int64 {
 	return int64(stat.pzxid)
 }
 
-
 // -----------------------------------------------------------------------
 // Functions and methods related to ZooKeeper itself.
 
 const bufferSize = 1024 * 1024
 
-// Change the minimum level of logging output generated to adjust the
-// amount of information provided.
+// SetLogLevel changes the minimum level of logging output generated
+// to adjust the amount of information provided.
 func SetLogLevel(level int) {
 	C.zoo_set_debug_level(C.ZooLogLevel(level))
 }
 
-// Initialize the communication with a ZooKeeper cluster. The provided
+// Init initializes the communication with a ZooKeeper cluster. The provided
 // servers parameter may include multiple server addresses, separated
 // by commas, so that the client will automatically attempt to connect
 // to another server if one of them stops working for whatever reason.
@@ -303,33 +394,32 @@ func SetLogLevel(level int) {
 //
 // Session establishment is asynchronous, meaning that this function
 // will return before the communication with ZooKeeper is fully established.
-// The watch channel receives events of type SESSION_EVENT when the session
-// is established or broken. Unlike other event channels, these events must
-// *necessarily* be observed and taken out of the channel, otherwise the
-// application will panic.
-func Init(servers string, recvTimeout int) (zk *ZooKeeper, watch chan *Event, err Error) {
+// The watch channel receives events of type SESSION_EVENT when any change
+// to the state of the established connection happens.  See the documentation
+// for the Event type for more details.
+func Init(servers string, recvTimeout int) (zk *ZooKeeper, watch chan Event, err Error) {
 	zk, watch, err = internalInit(servers, recvTimeout, nil)
 	return
 }
 
-// Equivalent to Init(), but attempt to reestablish an existing session
+// Equivalent to Init, but attempt to reestablish an existing session
 // identified via the clientId parameter.
-func ReInit(servers string, recvTimeout int, clientId *ClientId) (zk *ZooKeeper, watch chan *Event, err Error) {
+func ReInit(servers string, recvTimeout int, clientId *ClientId) (zk *ZooKeeper, watch chan Event, err Error) {
 	zk, watch, err = internalInit(servers, recvTimeout, clientId)
 	return
 }
 
-func internalInit(servers string, recvTimeout int, clientId *ClientId) (*ZooKeeper, chan *Event, Error) {
+func internalInit(servers string, recvTimeout int, clientId *ClientId) (*ZooKeeper, chan Event, Error) {
 
 	zk := &ZooKeeper{}
-	zk.watchChannels = make(map[uintptr]chan *Event)
+	zk.watchChannels = make(map[uintptr]chan Event)
 
 	var cId *C.clientid_t
 	if clientId != nil {
 		cId = &clientId.cId
 	}
 
-	watchId, watchChannel := zk.createWatch(0) // Blocking watch channel!
+	watchId, watchChannel := zk.createWatch(true)
 	zk.sessionWatchId = watchId
 
 	cservers := C.CString(servers)
@@ -338,7 +428,7 @@ func internalInit(servers string, recvTimeout int, clientId *ClientId) (*ZooKeep
 		unsafe.Pointer(watchId), 0)
 	C.free(unsafe.Pointer(cservers))
 	if handle == nil {
-		zk.forgetAllWatches()
+		zk.closeAllWatches()
 		return nil, nil, newError(ZSYSTEMERROR, cerr)
 	}
 	zk.handle = handle
@@ -346,13 +436,13 @@ func internalInit(servers string, recvTimeout int, clientId *ClientId) (*ZooKeep
 	return zk, watchChannel, nil
 }
 
-// Obtain the client ID for the existing session with ZooKeeper.  This is useful
-// to reestablish an existing session via ReInit().
+// GetClientId returns the client ID for the existing session with ZooKeeper.
+// This is useful to reestablish an existing session via ReInit().
 func (zk *ZooKeeper) GetClientId() *ClientId {
 	return &ClientId{*C.zoo_client_id(zk.handle)}
 }
 
-// Terminate the ZooKeeper interaction.
+// Close terminates the ZooKeeper interaction.
 func (zk *ZooKeeper) Close() Error {
 
 	// Protect from concurrency around zk.handle change.
@@ -366,14 +456,7 @@ func (zk *ZooKeeper) Close() Error {
 	}
 	rc, cerr := C.zookeeper_close(zk.handle)
 
-	// See the documentation for STATE_CLOSED.
-	channel, _ := getWatchForSend(zk.sessionWatchId)
-	go func() { // Don't wait for channel to be available.
-		channel <- &Event{Type: EVENT_SESSION, State: STATE_CLOSED}
-		close(channel)
-	}()
-
-	zk.forgetAllWatches()
+	zk.closeAllWatches()
 	stopWatchLoop()
 
 	// At this point, nothing else should need zk.handle.
@@ -385,7 +468,7 @@ func (zk *ZooKeeper) Close() Error {
 	return nil
 }
 
-// Retrieve the data and status from an existing node.  err will be nil,
+// Get returns the data and status from an existing node.  err will be nil,
 // unless an error is found. Attempting to retrieve data from a non-existing
 // node is an error.
 func (zk *ZooKeeper) Get(path string) (data string, stat Stat, err Error) {
@@ -407,10 +490,11 @@ func (zk *ZooKeeper) Get(path string) (data string, stat Stat, err Error) {
 	return result, (*resultStat)(&cstat), nil
 }
 
-// Same as the Get() function, but also returns a channel which will receive
+// GetW works like Get but also returns a channel that will receive
 // a single Event value when the data or existence of the given ZooKeeper
-// node changes.
-func (zk *ZooKeeper) GetW(path string) (data string, stat Stat, watch chan *Event, err Error) {
+// node changes or when critical session events happen.  See the
+// documentation of the Event type for more details.
+func (zk *ZooKeeper) GetW(path string) (data string, stat Stat, watch chan Event, err Error) {
 
 	cpath := C.CString(path)
 	cbuffer := (*C.char)(C.malloc(bufferSize))
@@ -418,7 +502,7 @@ func (zk *ZooKeeper) GetW(path string) (data string, stat Stat, watch chan *Even
 	defer C.free(unsafe.Pointer(cpath))
 	defer C.free(unsafe.Pointer(cbuffer))
 
-	watchId, watchChannel := zk.createWatch(1)
+	watchId, watchChannel := zk.createWatch(true)
 
 	cstat := C.struct_Stat{}
 	rc, cerr := C.zoo_wget(zk.handle, cpath,
@@ -433,9 +517,9 @@ func (zk *ZooKeeper) GetW(path string) (data string, stat Stat, watch chan *Even
 	return result, (*resultStat)(&cstat), watchChannel, nil
 }
 
-// Retrieve the children list and status from an existing node. err will
-// be nil, unless an error is found. Attempting to retrieve the children
-// list from a non-existent node is an error.
+// GetChildren returns the children list and status from an existing node.
+// err will be nil, unless an error is found. Attempting to retrieve the
+// children list from a non-existent node is an error.
 func (zk *ZooKeeper) GetChildren(path string) (children []string, stat Stat, err Error) {
 
 	cpath := C.CString(path)
@@ -458,15 +542,16 @@ func (zk *ZooKeeper) GetChildren(path string) (children []string, stat Stat, err
 	return
 }
 
-// Same as the GetChildren() function, but also returns a channel which will
-// receive a single Event value when the child list of the given ZooKeeper
-// node changes.
-func (zk *ZooKeeper) GetChildrenW(path string) (children []string, stat Stat, watch chan *Event, err Error) {
+// GetChildrenW works like GetChildren but also returns a channel that will
+// receive a single Event value when a node is added or removed under the
+// provided path or when critical session events happen.  See the documentation
+// of the Event type for more details.
+func (zk *ZooKeeper) GetChildrenW(path string) (children []string, stat Stat, watch chan Event, err Error) {
 
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
 
-	watchId, watchChannel := zk.createWatch(1)
+	watchId, watchChannel := zk.createWatch(true)
 
 	cvector := C.struct_String_vector{}
 	cstat := C.struct_Stat{}
@@ -501,8 +586,9 @@ func parseStringVector(cvector *C.struct_String_vector) []string {
 	return vector
 }
 
-// Verify if a node exists at the given path.  If it does, stat will
-// contain meta information on the existing node, otherwise it will be nil.
+// Exists checks if a node exists at the given path.  If it does,
+// stat will contain meta information on the existing node, otherwise
+// it will be nil.
 func (zk *ZooKeeper) Exists(path string) (stat Stat, err Error) {
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
@@ -521,15 +607,16 @@ func (zk *ZooKeeper) Exists(path string) (stat Stat, err Error) {
 	return
 }
 
-// Same as the Exists() function, but also returns a channel which will
-// receive a single Event value when the node is created (in case it didn't
-// yet exist), or removed or CHANGED (!) (in case it existed).
-func (zk *ZooKeeper) ExistsW(path string) (stat Stat, watch chan *Event, err Error) {
-
+// ExistsW works like Exists but also returns a channel that will
+// receive an Event value when a node is created in case the returned
+// stat is nil and the node didn't exist, or when the existing node
+// is removed. It will also receive critical session events. See the
+// documentation of the Event type for more details.
+func (zk *ZooKeeper) ExistsW(path string) (stat Stat, watch chan Event, err Error) {
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
 
-	watchId, watchChannel := zk.createWatch(1)
+	watchId, watchChannel := zk.createWatch(true)
 
 	cstat := C.struct_Stat{}
 	rc, cerr := C.zoo_wexists(zk.handle, cpath,
@@ -551,16 +638,16 @@ func (zk *ZooKeeper) ExistsW(path string) (stat Stat, watch chan *Event, err Err
 	return
 }
 
-// Create a node at the given path with the given data. The provided flags
-// may determine features such as whether the node is ephemeral or not,
-// or whether it should have a sequence number attached to it, and the
-// provided ACLs will determine who can access the node and under which
-// circumstances.
+// Create creates a node at the given path with the given data. The
+// provided flags may determine features such as whether the node is
+// ephemeral or not, or whether it should have a sequence number
+// attached to it, and the provided ACLs will determine who can access
+// the node and under which circumstances.
 //
 // The returned path is useful in cases where the created path may differ
-// from the requested one, such as when a sequence number is appended to it.
+// from the requested one, such as when a sequence number is appended
+// to it due to the use of the gozk.SEQUENCE flag.
 func (zk *ZooKeeper) Create(path, value string, flags int, aclv []ACL) (pathCreated string, err Error) {
-
 	cpath := C.CString(path)
 	cvalue := C.CString(value)
 	defer C.free(unsafe.Pointer(cpath))
@@ -583,14 +670,14 @@ func (zk *ZooKeeper) Create(path, value string, flags int, aclv []ACL) (pathCrea
 	return C.GoString(cpathCreated), nil
 }
 
-// Modify the data for the existing node at the given path, replacing it
-// by the provided value.  If version is not -1, the operation will only
+// Set modifies the data for the existing node at the given path, replacing it
+// by the provided value. If version is not -1, the operation will only
 // succeed if the node is still at the given version when the replacement
 // happens as an atomic operation. The returned Stat value will contain
 // data for the resulting node, after the operation is performed.
 //
 // It is an error to attempt to set the data of a non-existing node with
-// this function. In these cases, use Create() instead.
+// this function. In these cases, use Create instead.
 func (zk *ZooKeeper) Set(path, value string, version int32) (stat Stat, err Error) {
 
 	cpath := C.CString(path)
@@ -609,26 +696,23 @@ func (zk *ZooKeeper) Set(path, value string, version int32) (stat Stat, err Erro
 	return (*resultStat)(&cstat), nil
 }
 
-// Remove the node at the given path. If version is not -1, the operation
-// will only succeed if the node is still at the given version when the
+// Delete removes the node at path. If version is not -1, the operation
+// will only succeed if the node is still at this version when the
 // node is deleted as an atomic operation.
 func (zk *ZooKeeper) Delete(path string, version int32) (err Error) {
-
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
-
 	rc, cerr := C.zoo_delete(zk.handle, cpath, C.int(version))
 	if rc != C.ZOK {
 		return newError(rc, cerr)
 	}
-
 	return nil
 }
 
-// Add a new authentication certificate to the given ZooKeeper
-// interaction.  The scheme parameter will specify how to handle the
+// AddAuth adds a new authentication certificate to the ZooKeeper
+// interaction. The scheme parameter will specify how to handle the
 // authentication information, while the cert parameter provides the
-// identity data itself.  For instance, the "digest" scheme requires
+// identity data itself. For instance, the "digest" scheme requires
 // a pair like "username:password" to be provided as the certificate.
 func (zk *ZooKeeper) AddAuth(scheme, cert string) Error {
 	cscheme := C.CString(scheme)
@@ -658,7 +742,7 @@ func (zk *ZooKeeper) AddAuth(scheme, cert string) Error {
 	return nil
 }
 
-// Retrieve the access control list for the given node.
+// GetACL returns the access control list for path.
 func (zk *ZooKeeper) GetACL(path string) ([]ACL, Stat, Error) {
 
 	cpath := C.CString(path)
@@ -677,7 +761,7 @@ func (zk *ZooKeeper) GetACL(path string) ([]ACL, Stat, Error) {
 	return aclv, (*resultStat)(&cstat), nil
 }
 
-// Change the access control list for the given node.
+// SetACL changes the access control list for path.
 func (zk *ZooKeeper) SetACL(path string, aclv []ACL, version int32) Error {
 
 	cpath := C.CString(path)
@@ -693,7 +777,6 @@ func (zk *ZooKeeper) SetACL(path string, aclv []ACL, version int32) Error {
 
 	return nil
 }
-
 
 func parseACLVector(caclv *C.struct_ACL_vector) []ACL {
 	structACLSize := unsafe.Sizeof(C.struct_ACL{})
@@ -742,15 +825,17 @@ func buildACLVector(aclv []ACL) *C.struct_ACL_vector {
 
 type ChangeFunc func(oldValue string, oldStat Stat) (newValue string, err os.Error)
 
-// The RetryChange function is a helper to facilitate lock-less optimistic
-// changing of node content. It will attempt to create or modify the
-// given path through the provided changeFunc. This function should be able
-// to be called multiple times in case the modification fails due to
-// concurrent changes, and it may return an error which will cause the
-// the RetryChange function to stop and return an Error with code
-// ZSYSTEMERROR and the same .String() result as the provided error.
+// RetryChange runs changeFunc to attempt to atomically change path
+// in a lock free manner, and retries in case there was another
+// concurrent change between reading and writing the node.
 //
-// This method is not suitable for a node which is frequently modified
+// changeFunc must work correctly if called multiple times in case
+// the modification fails due to concurrent changes, and it may return
+// an error that will cause the the RetryChange function to stop and
+// return an Error with code ZSYSTEMERROR and the same .String() result
+// as the provided error.
+//
+// This mechanism is not suitable for a node that is frequently modified
 // concurrently. For those cases, consider using a pessimistic locking
 // mechanism.
 //
@@ -771,8 +856,7 @@ type ChangeFunc func(oldValue string, oldStat Stat) (newValue string, err os.Err
 // in the same node), repeat from step 1.  If this procedure fails with any
 // other error, stop and return the error found.
 //
-func (zk *ZooKeeper) RetryChange(path string, flags int, acl []ACL,
-changeFunc ChangeFunc) (err Error) {
+func (zk *ZooKeeper) RetryChange(path string, flags int, acl []ACL, changeFunc ChangeFunc) (err Error) {
 	for {
 		oldValue, oldStat, getErr := zk.Get(path)
 		if getErr != nil && getErr.Code() != ZNONODE {
@@ -804,7 +888,6 @@ changeFunc ChangeFunc) (err Error) {
 	return err
 }
 
-
 // -----------------------------------------------------------------------
 // Watching mechanism.
 
@@ -813,7 +896,7 @@ changeFunc ChangeFunc) (err Error) {
 // this by hand.  That bridging works the following way:
 //
 // Whenever a *W() method is called, it will return a channel which
-// outputs *Event values.  Internally, a map is used to maintain references
+// outputs Event values.  Internally, a map is used to maintain references
 // between an unique integer key (the watchId), and the event channel. The
 // watchId is then handed to the C zookeeper library as the watch context,
 // so that we get it back when events happen.  Using an integer key as the
@@ -838,9 +921,9 @@ var watchZooKeepers = make(map[uintptr]*ZooKeeper)
 var watchCounter uintptr
 var watchLoopCounter int
 
-// Return the number of pending watches which have not been fired yet,
-// across all ZooKeeper instances.  This is useful mostly as a debugging
-// and testing aid.
+// CountPendingWatches returns the number of pending watches which have
+// not been fired yet, across all ZooKeeper instances.  This is useful
+// mostly as a debugging and testing aid.
 func CountPendingWatches() int {
 	watchMutex.Lock()
 	count := len(watchZooKeepers)
@@ -848,9 +931,14 @@ func CountPendingWatches() int {
 	return count
 }
 
-// Create and register a watch, returning the watch id and channel.
-func (zk *ZooKeeper) createWatch(cache int) (watchId uintptr, watchChannel chan *Event) {
-	watchChannel = make(chan *Event, cache)
+// createWatch creates and registers a watch, returning the watch id
+// and channel.
+func (zk *ZooKeeper) createWatch(session bool) (watchId uintptr, watchChannel chan Event) {
+	buf := 2 // session/watch event + closed event
+	if session {
+		buf = 32
+	}
+	watchChannel = make(chan Event, buf)
 	watchMutex.Lock()
 	defer watchMutex.Unlock()
 	watchId = watchCounter
@@ -860,9 +948,10 @@ func (zk *ZooKeeper) createWatch(cache int) (watchId uintptr, watchChannel chan 
 	return
 }
 
-// Forget about the given watch.  It won't ever get delivered
-// after this, so this shouldn't be done in case there's any chance
-// that the watch channel got visible.
+// forgetWatch cleans resources used by watchId and prevents it
+// from ever getting delivered. It shouldn't be used if there's any
+// chance the watch channel is still visible and not closed, since
+// it might mean a goroutine would be blocked forever.
 func (zk *ZooKeeper) forgetWatch(watchId uintptr) {
 	watchMutex.Lock()
 	defer watchMutex.Unlock()
@@ -870,36 +959,81 @@ func (zk *ZooKeeper) forgetWatch(watchId uintptr) {
 	watchZooKeepers[watchId] = nil, false
 }
 
-// Forget about *all* of the existing watches for the given zk.
-func (zk *ZooKeeper) forgetAllWatches() {
+var closedEvent = Event{Type: EVENT_SESSION, State: STATE_CLOSED}
+
+// closeAllWatches closes all watch channels for zk.
+func (zk *ZooKeeper) closeAllWatches() {
 	watchMutex.Lock()
 	defer watchMutex.Unlock()
 	for watchId, _ := range zk.watchChannels {
-		zk.watchChannels[watchId] = nil, false
-		watchZooKeepers[watchId] = nil, false
+		sendEventUnlocked(watchId, closedEvent)
 	}
 }
 
-// Retrieve the watch channel for a send operation, and a flag
-// stating whether the channel should be closed after the send.
-func getWatchForSend(watchId uintptr) (watchChannel chan *Event, closeAfter bool) {
-
+// sendEvent calls sendEventUnlocked with watchMutex acquired.
+func sendEvent(watchId uintptr, event Event) {
 	watchMutex.Lock()
 	defer watchMutex.Unlock()
-	if zk, ok := watchZooKeepers[watchId]; ok {
-		watchChannel = zk.watchChannels[watchId]
-		if watchId != zk.sessionWatchId {
-			zk.watchChannels[watchId] = nil, false
-			watchZooKeepers[watchId] = nil, false
-			closeAfter = true
-		}
-	}
-	return
+	sendEventUnlocked(watchId, event)
 }
 
-// Start the watch loop. Calling this function multiple times will
-// only increase a counter, rather than getting multiple watch loops
-// running.
+// sendEventUnlocked delivers the event to the watchId event channel.
+// If the event channel is a watch event channel, and the event is
+// about the watch (rather than a session event), an additional
+// STATE_CLOSED event is queued.  In that situation or when a closed
+// event is explicitly delivered, the resources for the channel are
+// freed.
+func sendEventUnlocked(watchId uintptr, event Event) {
+	zk, ok := watchZooKeepers[watchId]
+	if !ok {
+		return
+	}
+	if event.Type == EVENT_SESSION && watchId != zk.sessionWatchId {
+		switch event.State {
+		case STATE_EXPIRED_SESSION, STATE_AUTH_FAILED, STATE_CLOSED:
+		default:
+			// WTF? Feels like TCP saying "dropped a dup packet, ok?"
+			return
+		}
+	}
+	ch := zk.watchChannels[watchId]
+	if ch == nil {
+		return
+	}
+	select {
+	case ch <- event:
+	default:
+		// Channel not available for sending, which means session
+		// events are necessarily involved (trivial events go
+		// straight to the buffer), and the application isn't paying
+		// attention for long enough to have the buffer filled up.
+		// Break down now rather than leaking forever.
+		if watchId == zk.sessionWatchId {
+			panic("Session event channel buffer is full")
+		} else {
+			panic("Watch event channel buffer is full")
+		}
+	}
+	if event.State != STATE_CLOSED && watchId != zk.sessionWatchId {
+		// Watch channel did its job. Terminate it.
+		select {
+		case ch <- closedEvent:
+		default:
+			panic("Watch event channel buffer is full")
+		}
+		event = closedEvent
+	}
+	if event.State == STATE_CLOSED {
+		zk.watchChannels[watchId] = nil, false
+		watchZooKeepers[watchId] = nil, false
+		close(ch)
+	}
+}
+
+// runWatchLoop start the event loop to collect events from the C
+// library and dispatch them into Go land.  Calling this function
+// multiple times will only increase a counter, rather than
+// getting multiple watch loops running.
 func runWatchLoop() {
 	watchMutex.Lock()
 	if watchLoopCounter == 0 {
@@ -909,9 +1043,9 @@ func runWatchLoop() {
 	watchMutex.Unlock()
 }
 
-// Decrement the watch loop counter. For the moment, the watch loop
-// doesn't actually stop, but some day we can easily implement
-// termination of the loop in case it's necessary.
+// stopWatchLoop decrements the event loop counter. For the moment,
+// the event loop doesn't actually stop, but some day we can easily
+// implement termination of the loop if necessary.
 func stopWatchLoop() {
 	watchMutex.Lock()
 	watchLoopCounter -= 1
@@ -928,34 +1062,15 @@ func stopWatchLoop() {
 // channel, and go back onto waiting mode.
 func _watchLoop() {
 	for {
-		// This will block until there's a watch available.
+		// This will block until there's a watch event is available.
 		data := C.wait_for_watch()
-
 		event := Event{
 			Type:  int(data.event_type),
 			Path:  C.GoString(data.event_path),
 			State: int(data.connection_state),
 		}
-
 		watchId := uintptr(data.watch_context)
-		channel, closeAfter := getWatchForSend(watchId)
-		if channel != nil {
-			select {
-			case channel <- &event:
-				// Sent!
-			case <-time.After(3e9):
-				// Channel is unavailable for sending, which means this is a
-				// session event and the application isn't attempting to
-				// receive it.  As an experimental way to attempt to enforce
-				// careful coding, for the moment we'll block until either
-				// the event is read, or a timeout+panic happens.
-				panic("Timeout sending critical event to watch channel")
-			}
-			if closeAfter {
-				close(channel)
-			}
-		}
-
 		C.destroy_watch_data(data)
+		sendEvent(watchId, event)
 	}
 }

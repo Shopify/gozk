@@ -1,9 +1,9 @@
 package gozk_test
 
-
 import (
 	. "launchpad.net/gocheck"
 	"gozk"
+	"time"
 )
 
 // This error will be delivered via C errno, since ZK unfortunately
@@ -105,6 +105,30 @@ func (s *S) TestInjectedClosingStateInSessionWatch(c *C) {
 	c.Assert(event.State, Equals, gozk.STATE_CLOSED)
 }
 
+func (s *S) TestEventString(c *C) {
+	var event gozk.Event
+	event = gozk.Event{gozk.EVENT_SESSION, "/path", gozk.STATE_CONNECTED}
+	c.Assert(event, Matches, "ZooKeeper connected")
+	event = gozk.Event{gozk.EVENT_CREATED, "/path", gozk.STATE_CONNECTED}
+	c.Assert(event, Matches, "ZooKeeper connected; path created: /path")
+	event = gozk.Event{-1, "/path", gozk.STATE_CLOSED}
+	c.Assert(event, Matches, "ZooKeeper connection closed")
+}
+
+var okTests = []struct{gozk.Event; Ok bool}{
+	{gozk.Event{gozk.EVENT_SESSION, "", gozk.STATE_CONNECTED}, true},
+	{gozk.Event{gozk.EVENT_CREATED, "", gozk.STATE_CONNECTED}, true},
+	{gozk.Event{0, "", gozk.STATE_CLOSED}, false},
+	{gozk.Event{0, "", gozk.STATE_EXPIRED_SESSION}, false},
+	{gozk.Event{0, "", gozk.STATE_AUTH_FAILED}, false},
+}
+
+func (s *S) TestEventOk(c *C) {
+	for _, t := range okTests {
+		c.Assert(t.Event.Ok(), Equals, t.Ok)
+	}
+}
+
 func (s *S) TestGetAndStat(c *C) {
 	zk, _ := s.init(c)
 
@@ -138,8 +162,7 @@ func (s *S) TestGetAndError(c *C) {
 func (s *S) TestCreateAndGet(c *C) {
 	zk, _ := s.init(c)
 
-	path, err := zk.Create("/test-", "bababum", gozk.SEQUENCE|gozk.EPHEMERAL,
-		gozk.WorldACL(gozk.PERM_ALL))
+	path, err := zk.Create("/test-", "bababum", gozk.SEQUENCE|gozk.EPHEMERAL, gozk.WorldACL(gozk.PERM_ALL))
 	c.Assert(err, IsNil)
 	c.Assert(path, Matches, "/test-[0-9]+")
 
@@ -155,8 +178,7 @@ func (s *S) TestCreateAndGet(c *C) {
 func (s *S) TestCreateSetAndGet(c *C) {
 	zk, _ := s.init(c)
 
-	_, err := zk.Create("/test", "", gozk.EPHEMERAL,
-		gozk.WorldACL(gozk.PERM_ALL))
+	_, err := zk.Create("/test", "", gozk.EPHEMERAL, gozk.WorldACL(gozk.PERM_ALL))
 	c.Assert(err, IsNil)
 
 	stat, err := zk.Set("/test", "bababum", -1) // Any version.
@@ -175,8 +197,7 @@ func (s *S) TestGetAndWatch(c *C) {
 
 	c.Check(gozk.CountPendingWatches(), Equals, 1)
 
-	_, err := zk.Create("/test", "one", gozk.EPHEMERAL,
-		gozk.WorldACL(gozk.PERM_ALL))
+	_, err := zk.Create("/test", "one", gozk.EPHEMERAL, gozk.WorldACL(gozk.PERM_ALL))
 	c.Assert(err, IsNil)
 
 	data, stat, watch, err := zk.GetW("/test")
@@ -243,8 +264,7 @@ func (s *S) TestCloseReleasesWatches(c *C) {
 
 	c.Check(gozk.CountPendingWatches(), Equals, 1)
 
-	_, err := zk.Create("/test", "one", gozk.EPHEMERAL,
-		gozk.WorldACL(gozk.PERM_ALL))
+	_, err := zk.Create("/test", "one", gozk.EPHEMERAL, gozk.WorldACL(gozk.PERM_ALL))
 	c.Assert(err, IsNil)
 
 	_, _, _, err = zk.GetW("/test")
@@ -303,8 +323,7 @@ func (s *S) TestGetChildrenAndWatch(c *C) {
 
 	c.Check(gozk.CountPendingWatches(), Equals, 2)
 
-	_, err = zk.Create("/test1", "", gozk.EPHEMERAL,
-		gozk.WorldACL(gozk.PERM_ALL))
+	_, err = zk.Create("/test1", "", gozk.EPHEMERAL, gozk.WorldACL(gozk.PERM_ALL))
 	c.Assert(err, IsNil)
 
 	event := <-watch
@@ -328,8 +347,7 @@ func (s *S) TestGetChildrenAndWatch(c *C) {
 
 	c.Check(gozk.CountPendingWatches(), Equals, 2)
 
-	_, err = zk.Create("/test2", "", gozk.EPHEMERAL,
-		gozk.WorldACL(gozk.PERM_ALL))
+	_, err = zk.Create("/test2", "", gozk.EPHEMERAL, gozk.WorldACL(gozk.PERM_ALL))
 	c.Assert(err, IsNil)
 
 	event = <-watch
@@ -422,8 +440,7 @@ func (s *S) TestExistsAndWatchWithError(c *C) {
 func (s *S) TestDelete(c *C) {
 	zk, _ := s.init(c)
 
-	_, err := zk.Create("/test", "", gozk.EPHEMERAL,
-		gozk.WorldACL(gozk.PERM_ALL))
+	_, err := zk.Create("/test", "", gozk.EPHEMERAL, gozk.WorldACL(gozk.PERM_ALL))
 	c.Assert(err, IsNil)
 
 	err = zk.Delete("/test", 5)
@@ -455,8 +472,7 @@ func (s *S) TestGetClientIdAndReInit(c *C) {
 func (s *S) TestExistsWatchOnDataChange(c *C) {
 	zk, _ := s.init(c)
 
-	_, err := zk.Create("/test", "", gozk.EPHEMERAL,
-		gozk.WorldACL(gozk.PERM_ALL))
+	_, err := zk.Create("/test", "", gozk.EPHEMERAL, gozk.WorldACL(gozk.PERM_ALL))
 	c.Assert(err, IsNil)
 
 	_, watch, err := zk.ExistsW("/test")
@@ -474,8 +490,7 @@ func (s *S) TestExistsWatchOnDataChange(c *C) {
 func (s *S) TestGetACL(c *C) {
 	zk, _ := s.init(c)
 
-	_, err := zk.Create("/test", "", gozk.EPHEMERAL,
-		gozk.WorldACL(gozk.PERM_ALL))
+	_, err := zk.Create("/test", "", gozk.EPHEMERAL, gozk.WorldACL(gozk.PERM_ALL))
 	c.Assert(err, IsNil)
 
 	acl, stat, err := zk.GetACL("/test")
@@ -494,8 +509,7 @@ func (s *S) TestGetACL(c *C) {
 func (s *S) TestSetACL(c *C) {
 	zk, _ := s.init(c)
 
-	_, err := zk.Create("/test", "", gozk.EPHEMERAL,
-		gozk.WorldACL(gozk.PERM_ALL))
+	_, err := zk.Create("/test", "", gozk.EPHEMERAL, gozk.WorldACL(gozk.PERM_ALL))
 	c.Assert(err, IsNil)
 
 	err = zk.SetACL("/test", gozk.WorldACL(gozk.PERM_ALL), 5)
@@ -528,4 +542,110 @@ func (s *S) TestAddAuth(c *C) {
 
 	_, _, err = zk.Get("/test")
 	c.Assert(err, IsNil)
+}
+
+func (s *S) TestWatchOnReconnection(c *C) {
+	c.Check(gozk.CountPendingWatches(), Equals, 0)
+
+	zk, session := s.init(c)
+
+	event := <-session
+	c.Assert(event.Type, Equals, gozk.EVENT_SESSION)
+	c.Assert(event.State, Equals, gozk.STATE_CONNECTED)
+
+	c.Check(gozk.CountPendingWatches(), Equals, 1)
+
+	stat, watch, err := zk.ExistsW("/test")
+	c.Assert(err, IsNil)
+	c.Assert(stat, IsNil)
+
+	c.Check(gozk.CountPendingWatches(), Equals, 2)
+
+	s.StopZK()
+	time.Sleep(2e9)
+	s.StartZK()
+
+	// The session channel should receive the reconnection notification,
+	select {
+	case event := <-session:
+		c.Assert(event.State, Equals, gozk.STATE_CONNECTING)
+	case <-time.After(3e9):
+		c.Fatal("Session watch didn't fire")
+	}
+	select {
+	case event := <-session:
+		c.Assert(event.State, Equals, gozk.STATE_CONNECTED)
+	case <-time.After(3e9):
+		c.Fatal("Session watch didn't fire")
+	}
+
+	// The watch channel should not, since it's not affected.
+	select {
+	case event := <-watch:
+		c.Fatalf("Exists watch fired: %s", event)
+	default:
+	}
+
+	// And it should still work.
+	_, err = zk.Create("/test", "", gozk.EPHEMERAL, gozk.WorldACL(gozk.PERM_ALL))
+	c.Assert(err, IsNil)
+
+	event = <-watch
+	c.Assert(event, NotNil)
+	c.Assert(event.Type, Equals, gozk.EVENT_CREATED)
+	c.Assert(event.Path, Equals, "/test")
+
+	c.Check(gozk.CountPendingWatches(), Equals, 1)
+}
+
+func (s *S) TestWatchOnSessionExpiration(c *C) {
+	c.Check(gozk.CountPendingWatches(), Equals, 0)
+
+	zk, session := s.init(c)
+
+	event := <-session
+	c.Assert(event.Type, Equals, gozk.EVENT_SESSION)
+	c.Assert(event.State, Equals, gozk.STATE_CONNECTED)
+
+	c.Check(gozk.CountPendingWatches(), Equals, 1)
+
+	stat, watch, err := zk.ExistsW("/test")
+	c.Assert(err, IsNil)
+	c.Assert(stat, IsNil)
+
+	c.Check(gozk.CountPendingWatches(), Equals, 2)
+
+	// Use expiration trick described in the FAQ.
+	clientId := zk.GetClientId()
+	zk2, session2, err := gozk.ReInit(s.zkAddr, 5000, clientId)
+
+	for event := range session2 {
+		c.Log("Event from overlapping session: ", event)
+		if event.State == gozk.STATE_CONNECTED {
+			// Wait for zk to process the connection.
+			// Not reliable without this. :-(
+			time.Sleep(1e9)
+			zk2.Close()
+		}
+	}
+	for event := range session {
+		c.Log("Event from primary session: ", event)
+		if event.State == gozk.STATE_EXPIRED_SESSION {
+			break
+		}
+	}
+
+	select {
+	case event := <-watch:
+		c.Assert(event.State, Equals, gozk.STATE_EXPIRED_SESSION)
+	case <-time.After(3e9):
+		c.Fatal("Watch event didn't fire")
+	}
+
+	event = <-watch
+	c.Assert(event, NotNil)
+	c.Assert(event.Type, Equals, gozk.EVENT_SESSION)
+	c.Assert(event.State, Equals, gozk.STATE_CLOSED)
+
+	c.Check(gozk.CountPendingWatches(), Equals, 1)
 }

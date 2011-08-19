@@ -1,6 +1,5 @@
 package gozk_test
 
-
 import (
 	. "launchpad.net/gocheck"
 	"testing"
@@ -12,11 +11,9 @@ import (
 	"time"
 )
 
-
 func TestAll(t *testing.T) {
 	TestingT(t)
 }
-
 
 var _ = Suite(&S{})
 
@@ -33,7 +30,6 @@ type S struct {
 	liveWatches int
 	deadWatches chan bool
 }
-
 
 var logLevel = 0 //gozk.LOG_ERROR
 
@@ -52,8 +48,7 @@ var testLog4jPrp = ("log4j.rootLogger=INFO,CONSOLE\n" +
 	"log4j.appender.CONSOLE.layout.ConversionPattern=%d{ISO8601} [myid:%X{myid}] - %-5p [%t:%C{1}@%L] - %m%n" +
 	"")
 
-
-func (s *S) init(c *C) (*gozk.ZooKeeper, chan *gozk.Event) {
+func (s *S) init(c *C) (*gozk.ZooKeeper, chan gozk.Event) {
 	zk, watch, err := gozk.Init(s.zkAddr, 5000)
 	c.Assert(err, IsNil)
 
@@ -64,7 +59,7 @@ func (s *S) init(c *C) (*gozk.ZooKeeper, chan *gozk.Event) {
 	c.Assert(event.Type, Equals, gozk.EVENT_SESSION)
 	c.Assert(event.State, Equals, gozk.STATE_CONNECTED)
 
-	bufferedWatch := make(chan *gozk.Event, 256)
+	bufferedWatch := make(chan gozk.Event, 256)
 	bufferedWatch <- event
 
 	s.liveWatches += 1
@@ -76,12 +71,10 @@ func (s *S) init(c *C) (*gozk.ZooKeeper, chan *gozk.Event) {
 				if !ok {
 					break loop
 				}
-				if event != nil {
-					select {
-					case bufferedWatch <- event:
-					default:
-						panic("Too many events in buffered watch!")
-					}
+				select {
+				case bufferedWatch <- event:
+				default:
+					panic("Too many events in buffered watch!")
 				}
 			}
 		}
@@ -94,7 +87,6 @@ func (s *S) init(c *C) (*gozk.ZooKeeper, chan *gozk.Event) {
 func (s *S) SetUpTest(c *C) {
 	c.Assert(gozk.CountPendingWatches(), Equals, 0,
 		Bug("Test got a dirty watch state before running!"))
-
 	gozk.SetLogLevel(logLevel)
 }
 
@@ -120,7 +112,6 @@ func (s *S) TearDownTest(c *C) {
 	c.Assert(gozk.CountPendingWatches(), Equals, 0,
 		Bug("Test left live watches behind!"))
 }
-
 
 // We use the suite set up and tear down to manage a custom zookeeper
 //
@@ -173,6 +164,15 @@ func (s *S) SetUpSuite(c *C) {
 		panic("Can't write log4j.properties: " + err.String())
 	}
 
+	s.StartZK()
+}
+
+func (s *S) TearDownSuite(c *C) {
+	s.StopZK()
+	s.zkServerOut.Close()
+}
+
+func (s *S) StartZK() {
 	attr := os.ProcAttr{Files: []*os.File{os.Stdin, s.zkServerOut, os.Stderr}}
 	proc, err := os.StartProcess(s.zkServerSh, []string{s.zkServerSh, "start"}, &attr)
 	if err != nil {
@@ -187,11 +187,9 @@ func (s *S) SetUpSuite(c *C) {
 	}
 }
 
-func (s *S) TearDownSuite(c *C) {
-	var err os.Error
+func (s *S) StopZK() {
 	attr := os.ProcAttr{Files: []*os.File{os.Stdin, s.zkServerOut, os.Stderr}}
 	proc, err := os.StartProcess(s.zkServerSh, []string{s.zkServerSh, "stop"}, &attr)
-	s.zkServerOut.Close()
 	if err != nil {
 		panic("Problem executing zkServer.sh stop: " + err.String() +
 			" (look for runaway java processes!)")

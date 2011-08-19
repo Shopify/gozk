@@ -6,7 +6,6 @@ import (
 	"os"
 )
 
-
 func (s *S) TestRetryChangeCreating(c *C) {
 	zk, _ := s.init(c)
 
