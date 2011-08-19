@@ -28,7 +28,7 @@ import (
 // -----------------------------------------------------------------------
 // Main constants and data types.
 
-// The main ZooKeeper object, created through the Init() function.
+// The main ZooKeeper object, created through the Init function.
 // Encapsulates all communication with ZooKeeper.
 type ZooKeeper struct {
 	watchChannels  map[uintptr]chan Event
@@ -38,7 +38,7 @@ type ZooKeeper struct {
 }
 
 // ClientId represents the established session in ZooKeeper.  This is only
-// useful to be passed back into the ReInit() function.
+// useful to be passed back into the ReInit function.
 type ClientId struct {
 	cId C.clientid_t
 }
@@ -56,7 +56,7 @@ type ACL struct {
 // ZooKeeper connection state and in specific node aspects.
 // 
 // There are two sources of events: the session channel obtained during
-// initialization with gozk.Init, and any watch channels obtained
+// initialization with Init, and any watch channels obtained
 // through one of the W-suffixed functions (GetW, ExistsW, etc).
 // 
 // The session channel will only receive session-level events notifying
@@ -388,7 +388,7 @@ func SetLogLevel(level int) {
 // by commas, so that the client will automatically attempt to connect
 // to another server if one of them stops working for whatever reason.
 //
-// The recvTimeout parameter, given in milliseconds, allows controlling
+// The recvTimeout parameter, given in nanoseconds, allows controlling
 // the amount of time the connection can stay unresponsive before the
 // server will be considered problematic.
 //
@@ -397,19 +397,19 @@ func SetLogLevel(level int) {
 // The watch channel receives events of type SESSION_EVENT when any change
 // to the state of the established connection happens.  See the documentation
 // for the Event type for more details.
-func Init(servers string, recvTimeout int) (zk *ZooKeeper, watch chan Event, err Error) {
-	zk, watch, err = internalInit(servers, recvTimeout, nil)
+func Init(servers string, recvTimeoutNS int) (zk *ZooKeeper, watch chan Event, err Error) {
+	zk, watch, err = internalInit(servers, recvTimeoutNS, nil)
 	return
 }
 
 // Equivalent to Init, but attempt to reestablish an existing session
 // identified via the clientId parameter.
-func ReInit(servers string, recvTimeout int, clientId *ClientId) (zk *ZooKeeper, watch chan Event, err Error) {
-	zk, watch, err = internalInit(servers, recvTimeout, clientId)
+func ReInit(servers string, recvTimeoutNS int, clientId *ClientId) (zk *ZooKeeper, watch chan Event, err Error) {
+	zk, watch, err = internalInit(servers, recvTimeoutNS, clientId)
 	return
 }
 
-func internalInit(servers string, recvTimeout int, clientId *ClientId) (*ZooKeeper, chan Event, Error) {
+func internalInit(servers string, recvTimeoutNS int, clientId *ClientId) (*ZooKeeper, chan Event, Error) {
 
 	zk := &ZooKeeper{}
 	zk.watchChannels = make(map[uintptr]chan Event)
@@ -423,9 +423,7 @@ func internalInit(servers string, recvTimeout int, clientId *ClientId) (*ZooKeep
 	zk.sessionWatchId = watchId
 
 	cservers := C.CString(servers)
-	handle, cerr := C.zookeeper_init(cservers, C.watch_handler,
-		C.int(recvTimeout), cId,
-		unsafe.Pointer(watchId), 0)
+	handle, cerr := C.zookeeper_init(cservers, C.watch_handler, C.int(recvTimeoutNS / 1e6), cId, unsafe.Pointer(watchId), 0)
 	C.free(unsafe.Pointer(cservers))
 	if handle == nil {
 		zk.closeAllWatches()
