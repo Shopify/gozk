@@ -23,7 +23,7 @@ func (s *S) TestRetryChangeCreating(c *C) {
 	c.Assert(stat.Version(), Equals, int32(0))
 	c.Assert(data, Equals, "new")
 
-	acl, _, err := zk.GetACL("/test")
+	acl, _, err := zk.ACL("/test")
 	c.Assert(err, IsNil)
 	c.Assert(acl, Equals, gozk.WorldACL(gozk.PERM_ALL))
 }
@@ -51,7 +51,7 @@ func (s *S) TestRetryChangeSetting(c *C) {
 	c.Assert(data, Equals, "brand new")
 
 	// ACL was unchanged by RetryChange().
-	acl, _, err := zk.GetACL("/test")
+	acl, _, err := zk.ACL("/test")
 	c.Assert(err, IsNil)
 	c.Assert(acl, Equals, gozk.WorldACL(gozk.PERM_ALL))
 }
@@ -181,7 +181,7 @@ func (s *S) TestRetryChangeConflictOnSetDueToDelete(c *C) {
 	c.Assert(stat.Version(), Equals, int32(0))
 
 	// Should be the new ACL.
-	acl, _, err := zk.GetACL("/test")
+	acl, _, err := zk.ACL("/test")
 	c.Assert(err, IsNil)
 	c.Assert(acl, Equals, gozk.WorldACL(gozk.PERM_READ))
 }

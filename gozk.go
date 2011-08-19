@@ -435,9 +435,9 @@ func internalInit(servers string, recvTimeoutNS int64, clientId *ClientId) (*Zoo
 	return zk, watchChannel, nil
 }
 
-// GetClientId returns the client ID for the existing session with ZooKeeper.
+// ClientId returns the client ID for the existing session with ZooKeeper.
 // This is useful to reestablish an existing session via ReInit.
-func (zk *ZooKeeper) GetClientId() *ClientId {
+func (zk *ZooKeeper) ClientId() *ClientId {
 	return &ClientId{*C.zoo_client_id(zk.handle)}
 }
 
@@ -516,10 +516,10 @@ func (zk *ZooKeeper) GetW(path string) (data string, stat Stat, watch chan Event
 	return result, (*resultStat)(&cstat), watchChannel, nil
 }
 
-// GetChildren returns the children list and status from an existing node.
+// Children returns the children list and status from an existing node.
 // err will be nil, unless an error is found. Attempting to retrieve the
 // children list from a non-existent node is an error.
-func (zk *ZooKeeper) GetChildren(path string) (children []string, stat Stat, err Error) {
+func (zk *ZooKeeper) Children(path string) (children []string, stat Stat, err Error) {
 
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
@@ -541,11 +541,11 @@ func (zk *ZooKeeper) GetChildren(path string) (children []string, stat Stat, err
 	return
 }
 
-// GetChildrenW works like GetChildren but also returns a channel that will
+// ChildrenW works like Children but also returns a channel that will
 // receive a single Event value when a node is added or removed under the
 // provided path or when critical session events happen.  See the documentation
 // of the Event type for more details.
-func (zk *ZooKeeper) GetChildrenW(path string) (children []string, stat Stat, watch chan Event, err Error) {
+func (zk *ZooKeeper) ChildrenW(path string) (children []string, stat Stat, watch chan Event, err Error) {
 
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
@@ -741,8 +741,8 @@ func (zk *ZooKeeper) AddAuth(scheme, cert string) Error {
 	return nil
 }
 
-// GetACL returns the access control list for path.
-func (zk *ZooKeeper) GetACL(path string) ([]ACL, Stat, Error) {
+// ACL returns the access control list for path.
+func (zk *ZooKeeper) ACL(path string) ([]ACL, Stat, Error) {
 
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))

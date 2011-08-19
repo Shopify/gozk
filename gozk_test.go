@@ -288,29 +288,29 @@ func (s *S) TestClosingTwiceDoesntHang(c *C) {
 	c.Assert(err.Code(), Equals, gozk.ZCLOSING)
 }
 
-func (s *S) TestGetChildren(c *C) {
+func (s *S) TestChildren(c *C) {
 	zk, _ := s.init(c)
 
-	children, stat, err := zk.GetChildren("/")
+	children, stat, err := zk.Children("/")
 	c.Assert(err, IsNil)
 	c.Assert(children, Equals, []string{"zookeeper"})
 	c.Assert(stat.NumChildren(), Equals, int32(1))
 
-	children, stat, err = zk.GetChildren("/non-existent")
+	children, stat, err = zk.Children("/non-existent")
 	c.Assert(err, NotNil)
 	c.Assert(err.Code(), Equals, gozk.ZNONODE)
 	c.Assert(children, Equals, []string{})
 	c.Assert(stat, Equals, nil)
 }
 
-func (s *S) TestGetChildrenAndWatch(c *C) {
+func (s *S) TestChildrenAndWatch(c *C) {
 	c.Check(gozk.CountPendingWatches(), Equals, 0)
 
 	zk, _ := s.init(c)
 
 	c.Check(gozk.CountPendingWatches(), Equals, 1)
 
-	children, stat, watch, err := zk.GetChildrenW("/")
+	children, stat, watch, err := zk.ChildrenW("/")
 	c.Assert(err, IsNil)
 	c.Assert(children, Equals, []string{"zookeeper"})
 	c.Assert(stat.NumChildren(), Equals, int32(1))
@@ -332,7 +332,7 @@ func (s *S) TestGetChildrenAndWatch(c *C) {
 
 	c.Check(gozk.CountPendingWatches(), Equals, 1)
 
-	children, stat, watch, err = zk.GetChildrenW("/")
+	children, stat, watch, err = zk.ChildrenW("/")
 	c.Assert(err, IsNil)
 	c.Assert(stat.NumChildren(), Equals, int32(2))
 
@@ -356,14 +356,14 @@ func (s *S) TestGetChildrenAndWatch(c *C) {
 	c.Check(gozk.CountPendingWatches(), Equals, 1)
 }
 
-func (s *S) TestGetChildrenAndWatchWithError(c *C) {
+func (s *S) TestChildrenAndWatchWithError(c *C) {
 	c.Check(gozk.CountPendingWatches(), Equals, 0)
 
 	zk, _ := s.init(c)
 
 	c.Check(gozk.CountPendingWatches(), Equals, 1)
 
-	_, stat, watch, err := zk.GetChildrenW("/test")
+	_, stat, watch, err := zk.ChildrenW("/test")
 	c.Assert(err, NotNil)
 	c.Assert(err.Code(), Equals, gozk.ZNONODE)
 	c.Assert(watch, IsNil)
@@ -454,14 +454,14 @@ func (s *S) TestDelete(c *C) {
 	c.Assert(err.Code(), Equals, gozk.ZNONODE)
 }
 
-func (s *S) TestGetClientIdAndReInit(c *C) {
+func (s *S) TestClientIdAndReInit(c *C) {
 	zk1, _ := s.init(c)
-	clientId1 := zk1.GetClientId()
+	clientId1 := zk1.ClientId()
 
 	zk2, _, err := gozk.ReInit(s.zkAddr, 5e9, clientId1)
 	c.Assert(err, IsNil)
 	defer zk2.Close()
-	clientId2 := zk2.GetClientId()
+	clientId2 := zk2.ClientId()
 
 	c.Assert(clientId1, Equals, clientId2)
 }
@@ -486,19 +486,19 @@ func (s *S) TestExistsWatchOnDataChange(c *C) {
 	c.Assert(event.Type, Equals, gozk.EVENT_CHANGED)
 }
 
-func (s *S) TestGetACL(c *C) {
+func (s *S) TestACL(c *C) {
 	zk, _ := s.init(c)
 
 	_, err := zk.Create("/test", "", gozk.EPHEMERAL, gozk.WorldACL(gozk.PERM_ALL))
 	c.Assert(err, IsNil)
 
-	acl, stat, err := zk.GetACL("/test")
+	acl, stat, err := zk.ACL("/test")
 	c.Assert(err, IsNil)
 	c.Assert(acl, Equals, gozk.WorldACL(gozk.PERM_ALL))
 	c.Assert(stat, NotNil)
 	c.Assert(stat.Version(), Equals, int32(0))
 
-	acl, stat, err = zk.GetACL("/non-existent")
+	acl, stat, err = zk.ACL("/non-existent")
 	c.Assert(err, NotNil)
 	c.Assert(err.Code(), Equals, gozk.ZNONODE)
 	c.Assert(acl, IsNil)
@@ -518,7 +518,7 @@ func (s *S) TestSetACL(c *C) {
 	err = zk.SetACL("/test", gozk.WorldACL(gozk.PERM_READ), -1)
 	c.Assert(err, IsNil)
 
-	acl, _, err := zk.GetACL("/test")
+	acl, _, err := zk.ACL("/test")
 	c.Assert(err, IsNil)
 	c.Assert(acl, Equals, gozk.WorldACL(gozk.PERM_READ))
 }
@@ -613,7 +613,7 @@ func (s *S) TestWatchOnSessionExpiration(c *C) {
 	c.Check(gozk.CountPendingWatches(), Equals, 2)
 
 	// Use expiration trick described in the FAQ.
-	clientId := zk.GetClientId()
+	clientId := zk.ClientId()
 	zk2, session2, err := gozk.ReInit(s.zkAddr, 5e9, clientId)
 
 	for event := range session2 {
