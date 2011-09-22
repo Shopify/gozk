@@ -2,7 +2,7 @@ include $(GOROOT)/src/Make.inc
 
 all: package
 
-TARG=gozk
+TARG=launchpad.net/zookeeper/zookeeper
 
 CGOFILES=\
 	gozk.go\

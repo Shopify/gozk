@@ -1,4 +1,4 @@
-package gozk_test
+package zookeeper_test
 
 import (
 	. "launchpad.net/gocheck"
@@ -7,7 +7,7 @@ import (
 	"path"
 	"fmt"
 	"os"
-	"gozk"
+	"launchpad.net/zookeeper/zookeeper"
 	"time"
 )
 
@@ -25,13 +25,13 @@ type S struct {
 	zkServerOut *os.File
 	zkAddr      string
 
-	handles     []*gozk.ZooKeeper
-	events      []*gozk.Event
+	handles     []*zookeeper.Conn
+	events      []*zookeeper.Event
 	liveWatches int
 	deadWatches chan bool
 }
 
-var logLevel = 0 //gozk.LOG_ERROR
+var logLevel = 0 //zookeeper.LOG_ERROR
 
 
 var testZooCfg = ("dataDir=%s\n" +
@@ -48,18 +48,18 @@ var testLog4jPrp = ("log4j.rootLogger=INFO,CONSOLE\n" +
 	"log4j.appender.CONSOLE.layout.ConversionPattern=%d{ISO8601} [myid:%X{myid}] - %-5p [%t:%C{1}@%L] - %m%n" +
 	"")
 
-func (s *S) init(c *C) (*gozk.ZooKeeper, chan gozk.Event) {
-	zk, watch, err := gozk.Init(s.zkAddr, 5e9)
+func (s *S) init(c *C) (*zookeeper.Conn, chan zookeeper.Event) {
+	zk, watch, err := zookeeper.Dial(s.zkAddr, 5e9)
 	c.Assert(err, IsNil)
 
 	s.handles = append(s.handles, zk)
 
 	event := <-watch
 
-	c.Assert(event.Type, Equals, gozk.EVENT_SESSION)
-	c.Assert(event.State, Equals, gozk.STATE_CONNECTED)
+	c.Assert(event.Type, Equals, zookeeper.EVENT_SESSION)
+	c.Assert(event.State, Equals, zookeeper.STATE_CONNECTED)
 
-	bufferedWatch := make(chan gozk.Event, 256)
+	bufferedWatch := make(chan zookeeper.Event, 256)
 	bufferedWatch <- event
 
 	s.liveWatches += 1
@@ -86,9 +86,9 @@ func (s *S) init(c *C) (*gozk.ZooKeeper, chan gozk.Event) {
 }
 
 func (s *S) SetUpTest(c *C) {
-	c.Assert(gozk.CountPendingWatches(), Equals, 0,
+	c.Assert(zookeeper.CountPendingWatches(), Equals, 0,
 		Bug("Test got a dirty watch state before running!"))
-	gozk.SetLogLevel(logLevel)
+	zookeeper.SetLogLevel(logLevel)
 }
 
 func (s *S) TearDownTest(c *C) {
@@ -108,9 +108,9 @@ func (s *S) TearDownTest(c *C) {
 	}
 
 	// Reset the list of handles.
-	s.handles = make([]*gozk.ZooKeeper, 0)
+	s.handles = make([]*zookeeper.Conn, 0)
 
-	c.Assert(gozk.CountPendingWatches(), Equals, 0,
+	c.Assert(zookeeper.CountPendingWatches(), Equals, 0,
 		Bug("Test left live watches behind!"))
 }
 
@@ -130,8 +130,8 @@ func (s *S) SetUpSuite(c *C) {
 	s.zkTestRoot = c.MkDir()
 	s.zkTestPort = 21812
 
-	println("ZooKeeper test server directory:", s.zkTestRoot)
-	println("ZooKeeper test server port:", s.zkTestPort)
+	println("Conn test server directory:", s.zkTestRoot)
+	println("Conn test server port:", s.zkTestPort)
 
 	s.zkAddr = fmt.Sprintf("localhost:%d", s.zkTestPort)
 
