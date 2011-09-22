@@ -115,7 +115,10 @@ func (s *S) TestEventString(c *C) {
 	c.Assert(event, Matches, "Conn connection closed")
 }
 
-var okTests = []struct{zookeeper.Event; Ok bool}{
+var okTests = []struct {
+	zookeeper.Event
+	Ok bool
+}{
 	{zookeeper.Event{zookeeper.EVENT_SESSION, "", zookeeper.STATE_CONNECTED}, true},
 	{zookeeper.Event{zookeeper.EVENT_CREATED, "", zookeeper.STATE_CONNECTED}, true},
 	{zookeeper.Event{0, "", zookeeper.STATE_CLOSED}, false},
