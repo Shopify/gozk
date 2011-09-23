@@ -13,15 +13,18 @@ import (
 
 const zookeeperEnviron = "/etc/zookeeper/conf/environment"
 
-// Server returns a command that can be used to run a zookeeper
-// server listening on the specified TCP port.
-// The server is set up to send all log messages to its standard output
-// (/dev/null by default).
+// Server sets up a zookeeper server environment inside dataDir
+// for a server that listening on the specified TCP port, sending
+// all log messages to standard output.
+// The dataDir directory must exist already.
+// 
 // The zookeeper installation directory is specified by installedDir.
 // If this is empty, a system default will be used.
-// All zookeeper instance data will be stored in dataDir, which
-// must already exist.
-func Server(port int, dataDir, installedDir string) (c *exec.Cmd, err os.Error) {
+//
+// Server does not actually start the server. Instead it returns
+// a command line, suitable for passing to exec.Command,
+// for example.
+func Server(port int, dataDir, installedDir string) ([]string, os.Error) {
 	cp, err := classPath(installedDir)
 	if err != nil {
 		return nil, err
@@ -42,15 +45,15 @@ func Server(port int, dataDir, installedDir string) (c *exec.Cmd, err os.Error) 
 	if err != nil {
 		return nil, err
 	}
-	cmd := exec.Command(
+	cmd := []string{
 		exe,
 		"-cp", strings.Join(cp, ":"),
-		"-Dzookeeper.log.dir="+logDir,
+		"-Dzookeeper.log.dir=" + logDir,
 		"-Dzookeeper.root.logger=INFO,CONSOLE",
-		"-Dlog4j.configuration=file:"+logConfigPath,
+		"-Dlog4j.configuration=file:" + logConfigPath,
 		"org.apache.zookeeper.server.quorum.QuorumPeerMain",
 		configPath,
-	)
+	}
 	return cmd, nil
 }
 

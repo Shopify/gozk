@@ -35,7 +35,7 @@ type Conn struct {
 	mutex          sync.Mutex
 }
 
-// ClientId represents an established session in Conn.  It can be
+// ClientId represents an established ZooKeeper session.  It can be
 // passed into New to reestablish a connection to an existing session.
 type ClientId struct {
 	cId C.clientid_t
@@ -43,7 +43,7 @@ type ClientId struct {
 
 // ACL represents one access control list element, providing the permissions
 // (one of PERM_*), the scheme ("digest", etc), and the id (scheme-dependent)
-// for the access control mechanism in Conn.
+// for the access control mechanism in ZooKeeper.
 type ACL struct {
 	Perms  uint32
 	Scheme string
@@ -51,14 +51,14 @@ type ACL struct {
 }
 
 // Event channels are used to provide notifications of changes in the
-// Conn connection state and in specific node aspects.
+// ZooKeeper connection state and in specific node aspects.
 // 
 // There are two sources of events: the session channel obtained during
 // initialization with Init, and any watch channels obtained
 // through one of the W-suffixed functions (GetW, ExistsW, etc).
 // 
 // The session channel will only receive session-level events notifying
-// about critical and transient changes in the Conn connection
+// about critical and transient changes in the ZooKeeper connection
 // state (STATE_CONNECTED, STATE_EXPIRED_SESSION, etc).  On long
 // running applications the session channel must *necessarily* be
 // observed since certain events like session expirations require an
@@ -68,7 +68,7 @@ type ACL struct {
 //
 // Watch channels enable monitoring state for nodes, and the
 // moment they're fired depends on which function was called to
-// create them.  Note that, unlike in other Conn interfaces,
+// create them.  Note that, unlike in other ZooKeeper interfaces,
 // gozk will NOT dispatch unimportant session events such as
 // STATE_ASSOCIATING, STATE_CONNECTING and STATE_CONNECTED to
 // watch Event channels, since they are transient and disruptive
@@ -233,14 +233,14 @@ func init() {
 
 // AuthACL produces an ACL list containing a single ACL which uses
 // the provided permissions, with the scheme "auth", and ID "", which
-// is used by Conn to represent any authenticated user.
+// is used by ZooKeeper to represent any authenticated user.
 func AuthACL(perms uint32) []ACL {
 	return []ACL{{perms, "auth", ""}}
 }
 
 // WorldACL produces an ACL list containing a single ACL which uses
 // the provided permissions, with the scheme "world", and ID "anyone",
-// which is used by Conn to represent any user at all.
+// which is used by ZooKeeper to represent any user at all.
 func WorldACL(perms uint32) []ACL {
 	return []ACL{{perms, "world", "anyone"}}
 }
@@ -258,19 +258,19 @@ func (e Event) Ok() bool {
 func (e Event) String() (s string) {
 	switch e.State {
 	case STATE_EXPIRED_SESSION:
-		s = "Conn session expired"
+		s = "ZooKeeper session expired"
 	case STATE_AUTH_FAILED:
-		s = "Conn authentication failed"
+		s = "ZooKeeper authentication failed"
 	case STATE_CONNECTING:
-		s = "Conn connecting"
+		s = "ZooKeeper connecting"
 	case STATE_ASSOCIATING:
-		s = "Conn still associating"
+		s = "ZooKeeper still associating"
 	case STATE_CONNECTED:
-		s = "Conn connected"
+		s = "ZooKeeper connected"
 	case STATE_CLOSED:
-		s = "Conn connection closed"
+		s = "ZooKeeper connection closed"
 	default:
-		s = fmt.Sprintf("unknown Conn state %d", e.State)
+		s = fmt.Sprintf("unknown ZooKeeper state %d", e.State)
 	}
 	if e.Type == -1 || e.Type == EVENT_SESSION {
 		return
@@ -348,7 +348,7 @@ func (stat *Stat) Pzxid() int64 {
 }
 
 // -----------------------------------------------------------------------
-// Functions and methods related to Conn itself.
+// Functions and methods related to ZooKeeper itself.
 
 const bufferSize = 1024 * 1024
 
@@ -358,7 +358,7 @@ func SetLogLevel(level int) {
 	C.zoo_set_debug_level(C.ZooLogLevel(level))
 }
 
-// Dial initializes the communication with a Conn cluster. The provided
+// Dial initializes the communication with a ZooKeeper cluster. The provided
 // servers parameter may include multiple server addresses, separated
 // by commas, so that the client will automatically attempt to connect
 // to another server if one of them stops working for whatever reason.
@@ -368,7 +368,7 @@ func SetLogLevel(level int) {
 // server will be considered problematic.
 //
 // Session establishment is asynchronous, meaning that this function
-// will return before the communication with Conn is fully established.
+// will return before the communication with ZooKeeper is fully established.
 // The watch channel receives events of type SESSION_EVENT when any change
 // to the state of the established connection happens.  See the documentation
 // for the Event type for more details.
@@ -406,13 +406,13 @@ func dial(servers string, recvTimeoutNS int64, clientId *ClientId) (*Conn, <-cha
 	return zk, watchChannel, nil
 }
 
-// ClientId returns the client ID for the existing session with Conn.
+// ClientId returns the client ID for the existing session with ZooKeeper.
 // This is useful to reestablish an existing session via ReInit.
 func (zk *Conn) ClientId() *ClientId {
 	return &ClientId{*C.zoo_client_id(zk.handle)}
 }
 
-// Close terminates the Conn interaction.
+// Close terminates the ZooKeeper interaction.
 func (zk *Conn) Close() os.Error {
 
 	// Protect from concurrency around zk.handle change.
@@ -420,7 +420,7 @@ func (zk *Conn) Close() os.Error {
 	defer zk.mutex.Unlock()
 
 	if zk.handle == nil {
-		// Conn may hang indefinitely if a handler is closed twice,
+		// ZooKeeper may hang indefinitely if a handler is closed twice,
 		// so we get in the way and prevent it from happening.
 		return ZCLOSING
 	}
@@ -458,7 +458,7 @@ func (zk *Conn) Get(path string) (data string, stat *Stat, err os.Error) {
 }
 
 // GetW works like Get but also returns a channel that will receive
-// a single Event value when the data or existence of the given Conn
+// a single Event value when the data or existence of the given ZooKeeper
 // node changes or when critical session events happen.  See the
 // documentation of the Event type for more details.
 func (zk *Conn) GetW(path string) (data string, stat *Stat, watch <-chan Event, err os.Error) {
@@ -673,7 +673,7 @@ func (zk *Conn) Delete(path string, version int32) (err os.Error) {
 	return zkError(rc, cerr)
 }
 
-// AddAuth adds a new authentication certificate to the Conn
+// AddAuth adds a new authentication certificate to the ZooKeeper
 // interaction. The scheme parameter will specify how to handle the
 // authentication information, while the cert parameter provides the
 // identity data itself. For instance, the "digest" scheme requires
@@ -832,7 +832,7 @@ func (zk *Conn) RetryChange(path string, flags int, acl []ACL, changeFunc Change
 		}
 		_, err = zk.Set(path, newValue, oldStat.Version())
 		if err == nil || (err != ZBADVERSION && err != ZNONODE) {
-			return nil
+			return err
 		}
 	}
 	panic("not reached")
@@ -872,7 +872,7 @@ var watchCounter uintptr
 var watchLoopCounter int
 
 // CountPendingWatches returns the number of pending watches which have
-// not been fired yet, across all Conn instances.  This is useful
+// not been fired yet, across all ZooKeeper instances.  This is useful
 // mostly as a debugging and testing aid.
 func CountPendingWatches() int {
 	watchMutex.Lock()

@@ -2,7 +2,7 @@ package zookeeper_test
 
 import (
 	. "launchpad.net/gocheck"
-	"launchpad.net/zookeeper/zookeeper"
+	"launchpad.net/gozk/zookeeper"
 	"os"
 )
 
@@ -194,7 +194,6 @@ func (s *S) TestRetryChangeErrorInCallback(c *C) {
 			return "don't use this", os.NewError("BOOM!")
 		})
 	c.Assert(err, NotNil)
-	c.Assert(err, Equals, zookeeper.ZSYSTEMERROR)
 	c.Assert(err.String(), Equals, "BOOM!")
 
 	stat, err := zk.Exists("/test")
@@ -239,7 +238,6 @@ func (s *S) TestRetryChangeFailsSetting(c *C) {
 			called = true
 			return "", nil
 		})
-	c.Assert(err, NotNil)
 	c.Assert(err, Equals, zookeeper.ZNOAUTH)
 
 	stat, err := zk.Exists("/test")

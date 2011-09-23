@@ -2,7 +2,7 @@ package zookeeper_test
 
 import (
 	. "launchpad.net/gocheck"
-	"launchpad.net/zookeeper/zookeeper"
+	"launchpad.net/gozk/zookeeper"
 	"time"
 )
 
@@ -108,11 +108,11 @@ func (s *S) TestClosingStateInSessionWatch(c *C) {
 func (s *S) TestEventString(c *C) {
 	var event zookeeper.Event
 	event = zookeeper.Event{zookeeper.EVENT_SESSION, "/path", zookeeper.STATE_CONNECTED}
-	c.Assert(event, Matches, "Conn connected")
+	c.Assert(event, Matches, "ZooKeeper connected")
 	event = zookeeper.Event{zookeeper.EVENT_CREATED, "/path", zookeeper.STATE_CONNECTED}
-	c.Assert(event, Matches, "Conn connected; path created: /path")
+	c.Assert(event, Matches, "ZooKeeper connected; path created: /path")
 	event = zookeeper.Event{-1, "/path", zookeeper.STATE_CLOSED}
-	c.Assert(event, Matches, "Conn connection closed")
+	c.Assert(event, Matches, "ZooKeeper connection closed")
 }
 
 var okTests = []struct {
@@ -280,7 +280,7 @@ func (s *S) TestCloseReleasesWatches(c *C) {
 	c.Assert(zookeeper.CountPendingWatches(), Equals, 0)
 }
 
-// By default, the Conn C client will hang indefinitely if a
+// By default, the ZooKeeper C client will hang indefinitely if a
 // handler is closed twice.  We get in the way and prevent it.
 func (s *S) TestClosingTwiceDoesntHang(c *C) {
 	zk, _ := s.init(c)
@@ -303,7 +303,7 @@ func (s *S) TestChildren(c *C) {
 	c.Assert(err, NotNil)
 	c.Assert(err, Equals, zookeeper.ZNONODE)
 	c.Assert(children, Equals, []string{})
-	c.Assert(stat, Equals, nil)
+	c.Assert(stat, Equals, (*zookeeper.Stat)(nil))
 }
 
 func (s *S) TestChildrenAndWatch(c *C) {
@@ -378,13 +378,12 @@ func (s *S) TestChildrenAndWatchWithError(c *C) {
 func (s *S) TestExists(c *C) {
 	zk, _ := s.init(c)
 
-	stat, err := zk.Exists("/zookeeper")
-	c.Assert(err, IsNil)
-	c.Assert(stat.NumChildren(), Equals, int32(1))
-
-	stat, err = zk.Exists("/non-existent")
+	stat, err := zk.Exists("/non-existent")
 	c.Assert(err, IsNil)
 	c.Assert(stat, IsNil)
+
+	stat, err = zk.Exists("/zookeeper")
+	c.Assert(err, IsNil)
 }
 
 func (s *S) TestExistsAndWatch(c *C) {
@@ -564,7 +563,7 @@ func (s *S) TestWatchOnReconnection(c *C) {
 
 	s.StopZK()
 	time.Sleep(2e9)
-	s.StartZK()
+	s.StartZK(c)
 
 	// The session channel should receive the reconnection notification,
 	select {
