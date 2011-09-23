@@ -2,13 +2,13 @@ include $(GOROOT)/src/Make.inc
 
 all: package
 
-TARG=launchpad.net/gozk/zookeeper
+TARG=launchpad.net/zookeeper
 
 GOFILES=\
 	server.go\
 	
 CGOFILES=\
-	gozk.go\
+	zookeeper.go\
 
 CGO_OFILES=\
 	helpers.o\

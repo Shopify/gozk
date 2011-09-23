@@ -14,7 +14,7 @@ import (
 const zookeeperEnviron = "/etc/zookeeper/conf/environment"
 
 // Server sets up a zookeeper server environment inside dataDir
-// for a server that listening on the specified TCP port, sending
+// for a server that listens on the specified TCP port, sending
 // all log messages to standard output.
 // The dataDir directory must exist already.
 // 
@@ -37,7 +37,7 @@ func Server(port int, dataDir, installedDir string) ([]string, os.Error) {
 	if err != nil {
 		return nil, err
 	}
-	configPath, err := writeZookeeperConfig(dataDir, port)
+	configPath, err := writeZooKeeperConfig(dataDir, port)
 	if err != nil {
 		return nil, err
 	}
@@ -57,21 +57,21 @@ func Server(port int, dataDir, installedDir string) ([]string, os.Error) {
 	return cmd, nil
 }
 
-var log4jProperties = []byte(`
+var log4jProperties = `
 log4j.rootLogger=INFO, CONSOLE
 log4j.appender.CONSOLE=org.apache.log4j.ConsoleAppender
 log4j.appender.CONSOLE.Threshold=INFO
 log4j.appender.CONSOLE.layout=org.apache.log4j.PatternLayout
 log4j.appender.CONSOLE.layout.ConversionPattern=%d{ISO8601} - %-5p [%t:%C{1}@%L] - %m%n
-`)
+`
 
 func writeLog4JConfig(dir string) (path string, err os.Error) {
 	path = filepath.Join(dir, "log4j.properties")
-	err = ioutil.WriteFile(path, log4jProperties, 0666)
+	err = ioutil.WriteFile(path, []byte(log4jProperties), 0666)
 	return
 }
 
-func writeZookeeperConfig(dir string, port int) (path string, err os.Error) {
+func writeZooKeeperConfig(dir string, port int) (path string, err os.Error) {
 	path = filepath.Join(dir, "zoo.cfg")
 	err = ioutil.WriteFile(path, []byte(fmt.Sprintf(
 		"tickTime=2000\n"+
@@ -105,11 +105,11 @@ func classPath(dir string) ([]string, os.Error) {
 }
 
 func systemClassPath() ([]string, os.Error) {
-	fd, err := os.Open(zookeeperEnviron)
-	if fd == nil {
+	f, err := os.Open(zookeeperEnviron)
+	if f == nil {
 		return nil, err
 	}
-	r := bufio.NewReader(fd)
+	r := bufio.NewReader(f)
 	for {
 		line, err := r.ReadSlice('\n')
 		if err != nil {
@@ -121,6 +121,9 @@ func systemClassPath() ([]string, os.Error) {
 
 		// remove variable and newline
 		path := string(line[len("CLASSPATH=") : len(line)-1])
+
+		// trim white space
+		path = strings.Trim(path, " \t\r")
 
 		// strip quotes
 		if path[0] == '"' {

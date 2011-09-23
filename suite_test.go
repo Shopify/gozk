@@ -5,7 +5,7 @@ import (
 	"bufio"
 	"exec"
 	"fmt"
-	"launchpad.net/gozk/zookeeper"
+	"launchpad.net/zookeeper"
 	"os"
 	"testing"
 	"time"
@@ -21,7 +21,7 @@ type S struct {
 	zkArgs     []string
 	zkTestRoot string
 	zkTestPort int
-	zkProcess  *os.Process // The running zookeeper process
+	zkProcess  *os.Process // The running ZooKeeper process
 	zkAddr     string
 
 	handles     []*zookeeper.Conn
@@ -98,7 +98,7 @@ func (s *S) TearDownTest(c *C) {
 		Bug("Test left live watches behind!"))
 }
 
-// We use the suite set up and tear down to manage a custom zookeeper
+// We use the suite set up and tear down to manage a custom ZooKeeper
 //
 func (s *S) SetUpSuite(c *C) {
 	var err os.Error

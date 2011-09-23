@@ -2,7 +2,7 @@ package zookeeper_test
 
 import (
 	. "launchpad.net/gocheck"
-	"launchpad.net/gozk/zookeeper"
+	"launchpad.net/zookeeper"
 	"os"
 )
 

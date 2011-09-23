@@ -2,7 +2,7 @@ package zookeeper_test
 
 import (
 	. "launchpad.net/gocheck"
-	"launchpad.net/gozk/zookeeper"
+	"launchpad.net/zookeeper"
 	"time"
 )
 
@@ -303,7 +303,7 @@ func (s *S) TestChildren(c *C) {
 	c.Assert(err, NotNil)
 	c.Assert(err, Equals, zookeeper.ZNONODE)
 	c.Assert(children, Equals, []string{})
-	c.Assert(stat, Equals, (*zookeeper.Stat)(nil))
+	c.Assert(stat, IsNil)
 }
 
 func (s *S) TestChildrenAndWatch(c *C) {

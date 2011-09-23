@@ -1,4 +1,4 @@
-// gozk - Zookeeper support for the Go language
+// gozk - ZooKeeper support for the Go language
 //
 //   https://wiki.ubuntu.com/gozk
 //
@@ -27,7 +27,7 @@ import (
 // -----------------------------------------------------------------------
 // Main constants and data types.
 
-// Conn represents a connection to a set of Zookeeper nodes.
+// Conn represents a connection to a set of ZooKeeper nodes.
 type Conn struct {
 	watchChannels  map[uintptr]chan Event
 	sessionWatchId uintptr
@@ -36,7 +36,7 @@ type Conn struct {
 }
 
 // ClientId represents an established ZooKeeper session.  It can be
-// passed into New to reestablish a connection to an existing session.
+// passed into Redial to reestablish a connection to an existing session.
 type ClientId struct {
 	cId C.clientid_t
 }
@@ -97,7 +97,7 @@ type Event struct {
 	State int
 }
 
-// Error represents a Zookeeper error.
+// Error represents a ZooKeeper error.
 type Error int
 
 const (
@@ -132,7 +132,7 @@ func (error Error) String() string {
 }
 
 // zkError creates an appropriate error return from
-// a zookeeper status and the errno return from a C API
+// a ZooKeeper status and the errno return from a C API
 // call.
 func zkError(rc C.int, cerr os.Error) os.Error {
 	code := Error(rc)
@@ -848,7 +848,7 @@ func (zk *Conn) RetryChange(path string, flags int, acl []ACL, changeFunc Change
 // Whenever a *W method is called, it will return a channel which
 // outputs Event values.  Internally, a map is used to maintain references
 // between an unique integer key (the watchId), and the event channel. The
-// watchId is then handed to the C zookeeper library as the watch context,
+// watchId is then handed to the C ZooKeeper library as the watch context,
 // so that we get it back when events happen.  Using an integer key as the
 // watch context rather than a pointer is needed because there's no guarantee
 // that in the future the GC will not move objects around, and also because
@@ -861,7 +861,7 @@ func (zk *Conn) RetryChange(path string, flags int, acl []ACL, changeFunc Change
 // Since Cgo doesn't allow calling back into Go, we actually fire a new
 // goroutine the very first time Init is called, and allow it to block
 // in a pthread condition variable within a C function. This condition
-// will only be notified once a zookeeper watch callback appends new
+// will only be notified once a ZooKeeper watch callback appends new
 // entries to the event list.  When this happens, the C function returns
 // and we get back into Go land with the pointer to the watch data,
 // including the watchId and other event details such as type and path.
