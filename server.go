@@ -95,8 +95,15 @@ func classPath(dir string) ([]string, os.Error) {
 	if build := filepath.Join(dir, "build"); checkDirectory(build) == nil {
 		dir = build
 	}
-	classPath, _ := filepath.Glob(filepath.Join(dir, "zookeeper-*.jar"))
-	more, _ := filepath.Glob(filepath.Join(dir, "lib/*.jar"))
+	classPath, err := filepath.Glob(filepath.Join(dir, "zookeeper-*.jar"))
+	if err != nil {
+		panic(fmt.Errorf("glob for jar files: %v", err))
+	}
+	more, err := filepath.Glob(filepath.Join(dir, "lib/*.jar"))
+	if err != nil {
+		panic(fmt.Errorf("glob for lib jar files: %v", err))
+	}
+
 	classPath = append(classPath, more...)
 	if len(classPath) == 0 {
 		return nil, fmt.Errorf("zookeeper libraries not found in %q", dir)
