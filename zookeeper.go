@@ -1,4 +1,4 @@
-// gozk - Zookeeper support for the Go language
+// gozk - ZooKeeper support for the Go language
 //
 //   https://wiki.ubuntu.com/gozk
 //
@@ -6,7 +6,7 @@
 //
 // Written by Gustavo Niemeyer <gustavo.niemeyer@canonical.com>
 //
-package gozk
+package zookeeper
 
 /*
 #cgo CFLAGS: -I/usr/include/c-client-src
@@ -27,17 +27,16 @@ import (
 // -----------------------------------------------------------------------
 // Main constants and data types.
 
-// The main ZooKeeper object, created through the Init function.
-// Encapsulates all communication with ZooKeeper.
-type ZooKeeper struct {
+// Conn represents a connection to a set of ZooKeeper nodes.
+type Conn struct {
 	watchChannels  map[uintptr]chan Event
 	sessionWatchId uintptr
 	handle         *C.zhandle_t
 	mutex          sync.Mutex
 }
 
-// ClientId represents the established session in ZooKeeper.  This is only
-// useful to be passed back into the ReInit function.
+// ClientId represents an established ZooKeeper session.  It can be
+// passed into Redial to reestablish a connection to an existing session.
 type ClientId struct {
 	cId C.clientid_t
 }
@@ -98,34 +97,59 @@ type Event struct {
 	State int
 }
 
-// Error codes that may be used to verify the result of the
-// Code method from Error.
+// Error represents a ZooKeeper error.
+type Error int
+
 const (
-	ZOK                      = C.ZOK
-	ZSYSTEMERROR             = C.ZSYSTEMERROR
-	ZRUNTIMEINCONSISTENCY    = C.ZRUNTIMEINCONSISTENCY
-	ZDATAINCONSISTENCY       = C.ZDATAINCONSISTENCY
-	ZCONNECTIONLOSS          = C.ZCONNECTIONLOSS
-	ZMARSHALLINGERROR        = C.ZMARSHALLINGERROR
-	ZUNIMPLEMENTED           = C.ZUNIMPLEMENTED
-	ZOPERATIONTIMEOUT        = C.ZOPERATIONTIMEOUT
-	ZBADARGUMENTS            = C.ZBADARGUMENTS
-	ZINVALIDSTATE            = C.ZINVALIDSTATE
-	ZAPIERROR                = C.ZAPIERROR
-	ZNONODE                  = C.ZNONODE
-	ZNOAUTH                  = C.ZNOAUTH
-	ZBADVERSION              = C.ZBADVERSION
-	ZNOCHILDRENFOREPHEMERALS = C.ZNOCHILDRENFOREPHEMERALS
-	ZNODEEXISTS              = C.ZNODEEXISTS
-	ZNOTEMPTY                = C.ZNOTEMPTY
-	ZSESSIONEXPIRED          = C.ZSESSIONEXPIRED
-	ZINVALIDCALLBACK         = C.ZINVALIDCALLBACK
-	ZINVALIDACL              = C.ZINVALIDACL
-	ZAUTHFAILED              = C.ZAUTHFAILED
-	ZCLOSING                 = C.ZCLOSING
-	ZNOTHING                 = C.ZNOTHING
-	ZSESSIONMOVED            = C.ZSESSIONMOVED
+	ZOK                      Error = C.ZOK
+	ZSYSTEMERROR             Error = C.ZSYSTEMERROR
+	ZRUNTIMEINCONSISTENCY    Error = C.ZRUNTIMEINCONSISTENCY
+	ZDATAINCONSISTENCY       Error = C.ZDATAINCONSISTENCY
+	ZCONNECTIONLOSS          Error = C.ZCONNECTIONLOSS
+	ZMARSHALLINGERROR        Error = C.ZMARSHALLINGERROR
+	ZUNIMPLEMENTED           Error = C.ZUNIMPLEMENTED
+	ZOPERATIONTIMEOUT        Error = C.ZOPERATIONTIMEOUT
+	ZBADARGUMENTS            Error = C.ZBADARGUMENTS
+	ZINVALIDSTATE            Error = C.ZINVALIDSTATE
+	ZAPIERROR                Error = C.ZAPIERROR
+	ZNONODE                  Error = C.ZNONODE
+	ZNOAUTH                  Error = C.ZNOAUTH
+	ZBADVERSION              Error = C.ZBADVERSION
+	ZNOCHILDRENFOREPHEMERALS Error = C.ZNOCHILDRENFOREPHEMERALS
+	ZNODEEXISTS              Error = C.ZNODEEXISTS
+	ZNOTEMPTY                Error = C.ZNOTEMPTY
+	ZSESSIONEXPIRED          Error = C.ZSESSIONEXPIRED
+	ZINVALIDCALLBACK         Error = C.ZINVALIDCALLBACK
+	ZINVALIDACL              Error = C.ZINVALIDACL
+	ZAUTHFAILED              Error = C.ZAUTHFAILED
+	ZCLOSING                 Error = C.ZCLOSING
+	ZNOTHING                 Error = C.ZNOTHING
+	ZSESSIONMOVED            Error = C.ZSESSIONMOVED
 )
+
+func (error Error) String() string {
+	return C.GoString(C.zerror(C.int(error))) // Static, no need to free it.
+}
+
+// zkError creates an appropriate error return from
+// a ZooKeeper status and the errno return from a C API
+// call.
+func zkError(rc C.int, cerr os.Error) os.Error {
+	code := Error(rc)
+	switch code {
+	case ZOK:
+		return nil
+
+	case ZSYSTEMERROR:
+		// If a zookeeper call returns ZSYSTEMERROR, then
+		// errno becomes significant. If errno has not been
+		// set, then we will return ZSYSTEMERROR nonetheless.
+		if cerr != nil {
+			return cerr
+		}
+	}
+	return code
+}
 
 // Constants for SetLogLevel.
 const (
@@ -273,104 +297,54 @@ func (e Event) String() (s string) {
 }
 
 // -----------------------------------------------------------------------
-// Error interface which maps onto the ZooKeeper error codes.
-
-type Error interface {
-	String() string
-	Code() int
-}
-
-type errorType struct {
-	zkrc C.int
-	err  os.Error
-}
-
-func newError(zkrc C.int, err os.Error) Error {
-	return &errorType{zkrc, err}
-}
-
-func (error *errorType) String() (result string) {
-	if error.zkrc == ZSYSTEMERROR && error.err != nil {
-		result = error.err.String()
-	} else {
-		result = C.GoString(C.zerror(error.zkrc)) // Static, no need to free it.
-	}
-	return
-}
-
-// Code returns the error code that may be compared against one of
-// the gozk.Z* constants.
-func (error *errorType) Code() int {
-	return int(error.zkrc)
-}
-
-// -----------------------------------------------------------------------
-// Stat interface which maps onto the ZooKeeper Stat struct.
-
-// We declare this as an interface rather than an actual struct because
-// this way we don't have to copy data around between the real C struct
-// and the Go one on every call.  Most uses will only touch a few elements,
-// or even ignore the stat entirely, so that's a win.
 
 // Stat contains detailed information about a node.
-type Stat interface {
-	Czxid() int64
-	Mzxid() int64
-	CTime() int64
-	MTime() int64
-	Version() int32
-	CVersion() int32
-	AVersion() int32
-	EphemeralOwner() int64
-	DataLength() int32
-	NumChildren() int32
-	Pzxid() int64
+type Stat struct {
+	c C.struct_Stat
 }
 
-type resultStat C.struct_Stat
-
-func (stat *resultStat) Czxid() int64 {
-	return int64(stat.czxid)
+func (stat *Stat) Czxid() int64 {
+	return int64(stat.c.czxid)
 }
 
-func (stat *resultStat) Mzxid() int64 {
-	return int64(stat.mzxid)
+func (stat *Stat) Mzxid() int64 {
+	return int64(stat.c.mzxid)
 }
 
-func (stat *resultStat) CTime() int64 {
-	return int64(stat.ctime)
+func (stat *Stat) CTime() int64 {
+	return int64(stat.c.ctime)
 }
 
-func (stat *resultStat) MTime() int64 {
-	return int64(stat.mtime)
+func (stat *Stat) MTime() int64 {
+	return int64(stat.c.mtime)
 }
 
-func (stat *resultStat) Version() int32 {
-	return int32(stat.version)
+func (stat *Stat) Version() int32 {
+	return int32(stat.c.version)
 }
 
-func (stat *resultStat) CVersion() int32 {
-	return int32(stat.cversion)
+func (stat *Stat) CVersion() int32 {
+	return int32(stat.c.cversion)
 }
 
-func (stat *resultStat) AVersion() int32 {
-	return int32(stat.aversion)
+func (stat *Stat) AVersion() int32 {
+	return int32(stat.c.aversion)
 }
 
-func (stat *resultStat) EphemeralOwner() int64 {
-	return int64(stat.ephemeralOwner)
+func (stat *Stat) EphemeralOwner() int64 {
+	return int64(stat.c.ephemeralOwner)
 }
 
-func (stat *resultStat) DataLength() int32 {
-	return int32(stat.dataLength)
+func (stat *Stat) DataLength() int32 {
+	return int32(stat.c.dataLength)
 }
 
-func (stat *resultStat) NumChildren() int32 {
-	return int32(stat.numChildren)
+func (stat *Stat) NumChildren() int32 {
+	return int32(stat.c.numChildren)
 }
 
-func (stat *resultStat) Pzxid() int64 {
-	return int64(stat.pzxid)
+func (stat *Stat) Pzxid() int64 {
+	return int64(stat.c.pzxid)
 }
 
 // -----------------------------------------------------------------------
@@ -384,7 +358,7 @@ func SetLogLevel(level int) {
 	C.zoo_set_debug_level(C.ZooLogLevel(level))
 }
 
-// Init initializes the communication with a ZooKeeper cluster. The provided
+// Dial initializes the communication with a ZooKeeper cluster. The provided
 // servers parameter may include multiple server addresses, separated
 // by commas, so that the client will automatically attempt to connect
 // to another server if one of them stops working for whatever reason.
@@ -398,21 +372,18 @@ func SetLogLevel(level int) {
 // The watch channel receives events of type SESSION_EVENT when any change
 // to the state of the established connection happens.  See the documentation
 // for the Event type for more details.
-func Init(servers string, recvTimeoutNS int64) (zk *ZooKeeper, watch chan Event, err Error) {
-	zk, watch, err = internalInit(servers, recvTimeoutNS, nil)
-	return
+func Dial(servers string, recvTimeoutNS int64) (*Conn, <-chan Event, os.Error) {
+	return dial(servers, recvTimeoutNS, nil)
 }
 
-// Equivalent to Init, but attempt to reestablish an existing session
+// Redial is equivalent to Dial, but attempts to reestablish an existing session
 // identified via the clientId parameter.
-func ReInit(servers string, recvTimeoutNS int64, clientId *ClientId) (zk *ZooKeeper, watch chan Event, err Error) {
-	zk, watch, err = internalInit(servers, recvTimeoutNS, clientId)
-	return
+func Redial(servers string, recvTimeoutNS int64, clientId *ClientId) (*Conn, <-chan Event, os.Error) {
+	return dial(servers, recvTimeoutNS, clientId)
 }
 
-func internalInit(servers string, recvTimeoutNS int64, clientId *ClientId) (*ZooKeeper, chan Event, Error) {
-
-	zk := &ZooKeeper{}
+func dial(servers string, recvTimeoutNS int64, clientId *ClientId) (*Conn, <-chan Event, os.Error) {
+	zk := &Conn{}
 	zk.watchChannels = make(map[uintptr]chan Event)
 
 	var cId *C.clientid_t
@@ -424,11 +395,11 @@ func internalInit(servers string, recvTimeoutNS int64, clientId *ClientId) (*Zoo
 	zk.sessionWatchId = watchId
 
 	cservers := C.CString(servers)
-	handle, cerr := C.zookeeper_init(cservers, C.watch_handler, C.int(recvTimeoutNS / 1e6), cId, unsafe.Pointer(watchId), 0)
+	handle, cerr := C.zookeeper_init(cservers, C.watch_handler, C.int(recvTimeoutNS/1e6), cId, unsafe.Pointer(watchId), 0)
 	C.free(unsafe.Pointer(cservers))
 	if handle == nil {
 		zk.closeAllWatches()
-		return nil, nil, newError(ZSYSTEMERROR, cerr)
+		return nil, nil, zkError(C.int(ZSYSTEMERROR), cerr)
 	}
 	zk.handle = handle
 	runWatchLoop()
@@ -437,12 +408,12 @@ func internalInit(servers string, recvTimeoutNS int64, clientId *ClientId) (*Zoo
 
 // ClientId returns the client ID for the existing session with ZooKeeper.
 // This is useful to reestablish an existing session via ReInit.
-func (zk *ZooKeeper) ClientId() *ClientId {
+func (zk *Conn) ClientId() *ClientId {
 	return &ClientId{*C.zoo_client_id(zk.handle)}
 }
 
 // Close terminates the ZooKeeper interaction.
-func (zk *ZooKeeper) Close() Error {
+func (zk *Conn) Close() os.Error {
 
 	// Protect from concurrency around zk.handle change.
 	zk.mutex.Lock()
@@ -451,7 +422,7 @@ func (zk *ZooKeeper) Close() Error {
 	if zk.handle == nil {
 		// ZooKeeper may hang indefinitely if a handler is closed twice,
 		// so we get in the way and prevent it from happening.
-		return newError(ZCLOSING, nil)
+		return ZCLOSING
 	}
 	rc, cerr := C.zookeeper_close(zk.handle)
 
@@ -461,16 +432,13 @@ func (zk *ZooKeeper) Close() Error {
 	// At this point, nothing else should need zk.handle.
 	zk.handle = nil
 
-	if rc != C.ZOK {
-		return newError(rc, cerr)
-	}
-	return nil
+	return zkError(rc, cerr)
 }
 
 // Get returns the data and status from an existing node.  err will be nil,
 // unless an error is found. Attempting to retrieve data from a non-existing
 // node is an error.
-func (zk *ZooKeeper) Get(path string) (data string, stat Stat, err Error) {
+func (zk *Conn) Get(path string) (data string, stat *Stat, err os.Error) {
 
 	cpath := C.CString(path)
 	cbuffer := (*C.char)(C.malloc(bufferSize))
@@ -478,22 +446,22 @@ func (zk *ZooKeeper) Get(path string) (data string, stat Stat, err Error) {
 	defer C.free(unsafe.Pointer(cpath))
 	defer C.free(unsafe.Pointer(cbuffer))
 
-	cstat := C.struct_Stat{}
+	var cstat Stat
 	rc, cerr := C.zoo_wget(zk.handle, cpath, nil, nil,
-		cbuffer, &cbufferLen, &cstat)
+		cbuffer, &cbufferLen, &cstat.c)
 	if rc != C.ZOK {
-		return "", nil, newError(rc, cerr)
+		return "", nil, zkError(rc, cerr)
 	}
-	result := C.GoStringN(cbuffer, cbufferLen)
 
-	return result, (*resultStat)(&cstat), nil
+	result := C.GoStringN(cbuffer, cbufferLen)
+	return result, &cstat, nil
 }
 
 // GetW works like Get but also returns a channel that will receive
 // a single Event value when the data or existence of the given ZooKeeper
 // node changes or when critical session events happen.  See the
 // documentation of the Event type for more details.
-func (zk *ZooKeeper) GetW(path string) (data string, stat Stat, watch chan Event, err Error) {
+func (zk *Conn) GetW(path string) (data string, stat *Stat, watch <-chan Event, err os.Error) {
 
 	cpath := C.CString(path)
 	cbuffer := (*C.char)(C.malloc(bufferSize))
@@ -503,40 +471,39 @@ func (zk *ZooKeeper) GetW(path string) (data string, stat Stat, watch chan Event
 
 	watchId, watchChannel := zk.createWatch(true)
 
-	cstat := C.struct_Stat{}
+	var cstat Stat
 	rc, cerr := C.zoo_wget(zk.handle, cpath,
 		C.watch_handler, unsafe.Pointer(watchId),
-		cbuffer, &cbufferLen, &cstat)
+		cbuffer, &cbufferLen, &cstat.c)
 	if rc != C.ZOK {
 		zk.forgetWatch(watchId)
-		return "", nil, nil, newError(rc, cerr)
+		return "", nil, nil, zkError(rc, cerr)
 	}
 
 	result := C.GoStringN(cbuffer, cbufferLen)
-	return result, (*resultStat)(&cstat), watchChannel, nil
+	return result, &cstat, watchChannel, nil
 }
 
 // Children returns the children list and status from an existing node.
-// err will be nil, unless an error is found. Attempting to retrieve the
-// children list from a non-existent node is an error.
-func (zk *ZooKeeper) Children(path string) (children []string, stat Stat, err Error) {
+// Attempting to retrieve the children list from a non-existent node is an error.
+func (zk *Conn) Children(path string) (children []string, stat *Stat, err os.Error) {
 
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
 
 	cvector := C.struct_String_vector{}
-	cstat := C.struct_Stat{}
+	var cstat Stat
 	rc, cerr := C.zoo_wget_children2(zk.handle, cpath, nil, nil,
-		&cvector, &cstat)
+		&cvector, &cstat.c)
 
 	// Can't happen if rc != 0, but avoid potential memory leaks in the future.
 	if cvector.count != 0 {
 		children = parseStringVector(&cvector)
 	}
-	if rc != C.ZOK {
-		err = newError(rc, cerr)
+	if rc == C.ZOK {
+		stat = &cstat
 	} else {
-		stat = (*resultStat)(&cstat)
+		err = zkError(rc, cerr)
 	}
 	return
 }
@@ -545,7 +512,7 @@ func (zk *ZooKeeper) Children(path string) (children []string, stat Stat, err Er
 // receive a single Event value when a node is added or removed under the
 // provided path or when critical session events happen.  See the documentation
 // of the Event type for more details.
-func (zk *ZooKeeper) ChildrenW(path string) (children []string, stat Stat, watch chan Event, err Error) {
+func (zk *Conn) ChildrenW(path string) (children []string, stat *Stat, watch <-chan Event, err os.Error) {
 
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
@@ -553,21 +520,21 @@ func (zk *ZooKeeper) ChildrenW(path string) (children []string, stat Stat, watch
 	watchId, watchChannel := zk.createWatch(true)
 
 	cvector := C.struct_String_vector{}
-	cstat := C.struct_Stat{}
+	var cstat Stat
 	rc, cerr := C.zoo_wget_children2(zk.handle, cpath,
 		C.watch_handler, unsafe.Pointer(watchId),
-		&cvector, &cstat)
+		&cvector, &cstat.c)
 
 	// Can't happen if rc != 0, but avoid potential memory leaks in the future.
 	if cvector.count != 0 {
 		children = parseStringVector(&cvector)
 	}
-	if rc != C.ZOK {
-		zk.forgetWatch(watchId)
-		err = newError(rc, cerr)
-	} else {
-		stat = (*resultStat)(&cstat)
+	if rc == C.ZOK {
+		stat = &cstat
 		watch = watchChannel
+	} else {
+		zk.forgetWatch(watchId)
+		err = zkError(rc, cerr)
 	}
 	return
 }
@@ -588,20 +555,20 @@ func parseStringVector(cvector *C.struct_String_vector) []string {
 // Exists checks if a node exists at the given path.  If it does,
 // stat will contain meta information on the existing node, otherwise
 // it will be nil.
-func (zk *ZooKeeper) Exists(path string) (stat Stat, err Error) {
+func (zk *Conn) Exists(path string) (stat *Stat, err os.Error) {
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
 
-	cstat := C.struct_Stat{}
-	rc, cerr := C.zoo_wexists(zk.handle, cpath, nil, nil, &cstat)
+	var cstat Stat
+	rc, cerr := C.zoo_wexists(zk.handle, cpath, nil, nil, &stat.c)
 
 	// We diverge a bit from the usual here: a ZNONODE is not an error
 	// for an exists call, otherwise every Exists call would have to check
 	// for err != nil and err.Code() != ZNONODE.
 	if rc == C.ZOK {
-		stat = (*resultStat)(&cstat)
+		stat = &cstat
 	} else if rc != C.ZNONODE {
-		err = newError(rc, cerr)
+		err = zkError(rc, cerr)
 	}
 	return
 }
@@ -611,28 +578,28 @@ func (zk *ZooKeeper) Exists(path string) (stat Stat, err Error) {
 // stat is nil and the node didn't exist, or when the existing node
 // is removed. It will also receive critical session events. See the
 // documentation of the Event type for more details.
-func (zk *ZooKeeper) ExistsW(path string) (stat Stat, watch chan Event, err Error) {
+func (zk *Conn) ExistsW(path string) (stat *Stat, watch <-chan Event, err os.Error) {
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
 
 	watchId, watchChannel := zk.createWatch(true)
 
-	cstat := C.struct_Stat{}
+	var cstat Stat
 	rc, cerr := C.zoo_wexists(zk.handle, cpath,
-		C.watch_handler, unsafe.Pointer(watchId), &cstat)
+		C.watch_handler, unsafe.Pointer(watchId), &cstat.c)
 
 	// We diverge a bit from the usual here: a ZNONODE is not an error
 	// for an exists call, otherwise every Exists call would have to check
 	// for err != nil and err.Code() != ZNONODE.
-	switch rc {
+	switch Error(rc) {
 	case ZOK:
-		stat = (*resultStat)(&cstat)
+		stat = &cstat
 		watch = watchChannel
 	case ZNONODE:
 		watch = watchChannel
 	default:
 		zk.forgetWatch(watchId)
-		err = newError(rc, cerr)
+		err = zkError(rc, cerr)
 	}
 	return
 }
@@ -646,7 +613,7 @@ func (zk *ZooKeeper) ExistsW(path string) (stat Stat, watch chan Event, err Erro
 // The returned path is useful in cases where the created path may differ
 // from the requested one, such as when a sequence number is appended
 // to it due to the use of the gozk.SEQUENCE flag.
-func (zk *ZooKeeper) Create(path, value string, flags int, aclv []ACL) (pathCreated string, err Error) {
+func (zk *Conn) Create(path, value string, flags int, aclv []ACL) (pathCreated string, err os.Error) {
 	cpath := C.CString(path)
 	cvalue := C.CString(value)
 	defer C.free(unsafe.Pointer(cpath))
@@ -662,11 +629,12 @@ func (zk *ZooKeeper) Create(path, value string, flags int, aclv []ACL) (pathCrea
 
 	rc, cerr := C.zoo_create(zk.handle, cpath, cvalue, C.int(len(value)),
 		caclv, C.int(flags), cpathCreated, C.int(cpathLen))
-	if rc != C.ZOK {
-		return "", newError(rc, cerr)
+	if rc == C.ZOK {
+		pathCreated = C.GoString(cpathCreated)
+	} else {
+		err = zkError(rc, cerr)
 	}
-
-	return C.GoString(cpathCreated), nil
+	return
 }
 
 // Set modifies the data for the existing node at the given path, replacing it
@@ -677,35 +645,32 @@ func (zk *ZooKeeper) Create(path, value string, flags int, aclv []ACL) (pathCrea
 //
 // It is an error to attempt to set the data of a non-existing node with
 // this function. In these cases, use Create instead.
-func (zk *ZooKeeper) Set(path, value string, version int32) (stat Stat, err Error) {
+func (zk *Conn) Set(path, value string, version int32) (stat *Stat, err os.Error) {
 
 	cpath := C.CString(path)
 	cvalue := C.CString(value)
 	defer C.free(unsafe.Pointer(cpath))
 	defer C.free(unsafe.Pointer(cvalue))
 
-	cstat := C.struct_Stat{}
-
+	var cstat Stat
 	rc, cerr := C.zoo_set2(zk.handle, cpath, cvalue, C.int(len(value)),
-		C.int(version), &cstat)
-	if rc != C.ZOK {
-		return nil, newError(rc, cerr)
+		C.int(version), &cstat.c)
+	if rc == C.ZOK {
+		stat = &cstat
+	} else {
+		err = zkError(rc, cerr)
 	}
-
-	return (*resultStat)(&cstat), nil
+	return
 }
 
 // Delete removes the node at path. If version is not -1, the operation
 // will only succeed if the node is still at this version when the
 // node is deleted as an atomic operation.
-func (zk *ZooKeeper) Delete(path string, version int32) (err Error) {
+func (zk *Conn) Delete(path string, version int32) (err os.Error) {
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
 	rc, cerr := C.zoo_delete(zk.handle, cpath, C.int(version))
-	if rc != C.ZOK {
-		return newError(rc, cerr)
-	}
-	return nil
+	return zkError(rc, cerr)
 }
 
 // AddAuth adds a new authentication certificate to the ZooKeeper
@@ -713,7 +678,7 @@ func (zk *ZooKeeper) Delete(path string, version int32) (err Error) {
 // authentication information, while the cert parameter provides the
 // identity data itself. For instance, the "digest" scheme requires
 // a pair like "username:password" to be provided as the certificate.
-func (zk *ZooKeeper) AddAuth(scheme, cert string) Error {
+func (zk *Conn) AddAuth(scheme, cert string) os.Error {
 	cscheme := C.CString(scheme)
 	ccert := C.CString(cert)
 	defer C.free(unsafe.Pointer(cscheme))
@@ -728,40 +693,36 @@ func (zk *ZooKeeper) AddAuth(scheme, cert string) Error {
 	rc, cerr := C.zoo_add_auth(zk.handle, cscheme, ccert, C.int(len(cert)),
 		C.handle_void_completion, unsafe.Pointer(data))
 	if rc != C.ZOK {
-		return newError(rc, cerr)
+		return zkError(rc, cerr)
 	}
 
 	C.wait_for_completion(data)
 
 	rc = C.int(uintptr(data.data))
-	if rc != C.ZOK {
-		return newError(rc, nil)
-	}
-
-	return nil
+	return zkError(rc, nil)
 }
 
 // ACL returns the access control list for path.
-func (zk *ZooKeeper) ACL(path string) ([]ACL, Stat, Error) {
+func (zk *Conn) ACL(path string) ([]ACL, *Stat, os.Error) {
 
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
 
 	caclv := C.struct_ACL_vector{}
-	cstat := C.struct_Stat{}
 
-	rc, cerr := C.zoo_get_acl(zk.handle, cpath, &caclv, &cstat)
+	var cstat Stat
+	rc, cerr := C.zoo_get_acl(zk.handle, cpath, &caclv, &cstat.c)
 	if rc != C.ZOK {
-		return nil, nil, newError(rc, cerr)
+		return nil, nil, zkError(rc, cerr)
 	}
 
 	aclv := parseACLVector(&caclv)
 
-	return aclv, (*resultStat)(&cstat), nil
+	return aclv, &cstat, nil
 }
 
 // SetACL changes the access control list for path.
-func (zk *ZooKeeper) SetACL(path string, aclv []ACL, version int32) Error {
+func (zk *Conn) SetACL(path string, aclv []ACL, version int32) os.Error {
 
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
@@ -770,11 +731,7 @@ func (zk *ZooKeeper) SetACL(path string, aclv []ACL, version int32) Error {
 	defer C.deallocate_ACL_vector(caclv)
 
 	rc, cerr := C.zoo_set_acl(zk.handle, cpath, C.int(version), caclv)
-	if rc != C.ZOK {
-		return newError(rc, cerr)
-	}
-
-	return nil
+	return zkError(rc, cerr)
 }
 
 func parseACLVector(caclv *C.struct_ACL_vector) []ACL {
@@ -822,7 +779,7 @@ func buildACLVector(aclv []ACL) *C.struct_ACL_vector {
 // -----------------------------------------------------------------------
 // RetryChange utility method.
 
-type ChangeFunc func(oldValue string, oldStat Stat) (newValue string, err os.Error)
+type ChangeFunc func(oldValue string, oldStat *Stat) (newValue string, err os.Error)
 
 // RetryChange runs changeFunc to attempt to atomically change path
 // in a lock free manner, and retries in case there was another
@@ -831,8 +788,7 @@ type ChangeFunc func(oldValue string, oldStat Stat) (newValue string, err os.Err
 // changeFunc must work correctly if called multiple times in case
 // the modification fails due to concurrent changes, and it may return
 // an error that will cause the the RetryChange function to stop and
-// return an Error with code ZSYSTEMERROR and the same .String() result
-// as the provided error.
+// return the same error.
 //
 // This mechanism is not suitable for a node that is frequently modified
 // concurrently. For those cases, consider using a pessimistic locking
@@ -845,8 +801,7 @@ type ChangeFunc func(oldValue string, oldStat Stat) (newValue string, err os.Err
 //
 // 2. Call the changeFunc with the current node value and stat,
 // or with an empty string and nil stat, if the node doesn't yet exist.
-// If the changeFunc returns an error, stop and return an Error with
-// ZSYSTEMERROR Code() and the same String() as the changeFunc error.
+// If the changeFunc returns an error, stop and return the same error.
 //
 // 3. If the changeFunc returns no errors, use the string returned as
 // the new candidate value for the node, and attempt to either create
@@ -855,36 +810,32 @@ type ChangeFunc func(oldValue string, oldStat Stat) (newValue string, err os.Err
 // in the same node), repeat from step 1.  If this procedure fails with any
 // other error, stop and return the error found.
 //
-func (zk *ZooKeeper) RetryChange(path string, flags int, acl []ACL, changeFunc ChangeFunc) (err Error) {
+func (zk *Conn) RetryChange(path string, flags int, acl []ACL, changeFunc ChangeFunc) os.Error {
 	for {
-		oldValue, oldStat, getErr := zk.Get(path)
-		if getErr != nil && getErr.Code() != ZNONODE {
-			err = getErr
-			break
+		oldValue, oldStat, err := zk.Get(path)
+		if err != nil && err != ZNONODE {
+			return err
 		}
-		newValue, osErr := changeFunc(oldValue, oldStat)
-		if osErr != nil {
-			return newError(ZSYSTEMERROR, osErr)
-		} else if oldStat == nil {
-			_, err = zk.Create(path, newValue, flags, acl)
-			if err == nil || err.Code() != ZNODEEXISTS {
-				break
+		newValue, err := changeFunc(oldValue, oldStat)
+		if err != nil {
+			return err
+		}
+		if oldStat == nil {
+			_, err := zk.Create(path, newValue, flags, acl)
+			if err == nil || err != ZNODEEXISTS {
+				return err
 			}
-		} else if newValue == oldValue {
+			continue
+		}
+		if newValue == oldValue {
 			return nil // Nothing to do.
-		} else {
-			_, err = zk.Set(path, newValue, oldStat.Version())
-			if err == nil {
-				break
-			} else {
-				code := err.Code()
-				if code != ZBADVERSION && code != ZNONODE {
-					break
-				}
-			}
+		}
+		_, err = zk.Set(path, newValue, oldStat.Version())
+		if err == nil || (err != ZBADVERSION && err != ZNONODE) {
+			return err
 		}
 	}
-	return err
+	panic("not reached")
 }
 
 // -----------------------------------------------------------------------
@@ -897,7 +848,7 @@ func (zk *ZooKeeper) RetryChange(path string, flags int, acl []ACL, changeFunc C
 // Whenever a *W method is called, it will return a channel which
 // outputs Event values.  Internally, a map is used to maintain references
 // between an unique integer key (the watchId), and the event channel. The
-// watchId is then handed to the C zookeeper library as the watch context,
+// watchId is then handed to the C ZooKeeper library as the watch context,
 // so that we get it back when events happen.  Using an integer key as the
 // watch context rather than a pointer is needed because there's no guarantee
 // that in the future the GC will not move objects around, and also because
@@ -910,13 +861,13 @@ func (zk *ZooKeeper) RetryChange(path string, flags int, acl []ACL, changeFunc C
 // Since Cgo doesn't allow calling back into Go, we actually fire a new
 // goroutine the very first time Init is called, and allow it to block
 // in a pthread condition variable within a C function. This condition
-// will only be notified once a zookeeper watch callback appends new
+// will only be notified once a ZooKeeper watch callback appends new
 // entries to the event list.  When this happens, the C function returns
 // and we get back into Go land with the pointer to the watch data,
 // including the watchId and other event details such as type and path.
 
 var watchMutex sync.Mutex
-var watchZooKeepers = make(map[uintptr]*ZooKeeper)
+var watchConns = make(map[uintptr]*Conn)
 var watchCounter uintptr
 var watchLoopCounter int
 
@@ -925,14 +876,14 @@ var watchLoopCounter int
 // mostly as a debugging and testing aid.
 func CountPendingWatches() int {
 	watchMutex.Lock()
-	count := len(watchZooKeepers)
+	count := len(watchConns)
 	watchMutex.Unlock()
 	return count
 }
 
 // createWatch creates and registers a watch, returning the watch id
 // and channel.
-func (zk *ZooKeeper) createWatch(session bool) (watchId uintptr, watchChannel chan Event) {
+func (zk *Conn) createWatch(session bool) (watchId uintptr, watchChannel chan Event) {
 	buf := 1 // session/watch event
 	if session {
 		buf = 32
@@ -943,7 +894,7 @@ func (zk *ZooKeeper) createWatch(session bool) (watchId uintptr, watchChannel ch
 	watchId = watchCounter
 	watchCounter += 1
 	zk.watchChannels[watchId] = watchChannel
-	watchZooKeepers[watchId] = zk
+	watchConns[watchId] = zk
 	return
 }
 
@@ -951,21 +902,21 @@ func (zk *ZooKeeper) createWatch(session bool) (watchId uintptr, watchChannel ch
 // from ever getting delivered. It shouldn't be used if there's any
 // chance the watch channel is still visible and not closed, since
 // it might mean a goroutine would be blocked forever.
-func (zk *ZooKeeper) forgetWatch(watchId uintptr) {
+func (zk *Conn) forgetWatch(watchId uintptr) {
 	watchMutex.Lock()
 	defer watchMutex.Unlock()
 	zk.watchChannels[watchId] = nil, false
-	watchZooKeepers[watchId] = nil, false
+	watchConns[watchId] = nil, false
 }
 
 // closeAllWatches closes all watch channels for zk.
-func (zk *ZooKeeper) closeAllWatches() {
+func (zk *Conn) closeAllWatches() {
 	watchMutex.Lock()
 	defer watchMutex.Unlock()
 	for watchId, ch := range zk.watchChannels {
 		close(ch)
 		zk.watchChannels[watchId] = nil, false
-		watchZooKeepers[watchId] = nil, false
+		watchConns[watchId] = nil, false
 	}
 }
 
@@ -978,7 +929,7 @@ func sendEvent(watchId uintptr, event Event) {
 	}
 	watchMutex.Lock()
 	defer watchMutex.Unlock()
-	zk, ok := watchZooKeepers[watchId]
+	zk, ok := watchConns[watchId]
 	if !ok {
 		return
 	}
@@ -1010,7 +961,7 @@ func sendEvent(watchId uintptr, event Event) {
 	}
 	if watchId != zk.sessionWatchId {
 		zk.watchChannels[watchId] = nil, false
-		watchZooKeepers[watchId] = nil, false
+		watchConns[watchId] = nil, false
 		close(ch)
 	}
 }
