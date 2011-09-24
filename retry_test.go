@@ -1,42 +1,41 @@
-package zookeeper_test
+package zk_test
 
 import (
 	. "launchpad.net/gocheck"
-	"launchpad.net/zookeeper"
+	"launchpad.net/gozk/zk"
 	"os"
 )
 
 func (s *S) TestRetryChangeCreating(c *C) {
-	zk, _ := s.init(c)
+	conn, _ := s.init(c)
 
-	err := zk.RetryChange("/test", zookeeper.EPHEMERAL, zookeeper.WorldACL(zookeeper.PERM_ALL),
-		func(data string, stat *zookeeper.Stat) (string, os.Error) {
+	err := conn.RetryChange("/test", zk.EPHEMERAL, zk.WorldACL(zk.PERM_ALL),
+		func(data string, stat *zk.Stat) (string, os.Error) {
 			c.Assert(data, Equals, "")
 			c.Assert(stat, IsNil)
 			return "new", nil
 		})
 	c.Assert(err, IsNil)
 
-	data, stat, err := zk.Get("/test")
+	data, stat, err := conn.Get("/test")
 	c.Assert(err, IsNil)
 	c.Assert(stat, NotNil)
 	c.Assert(stat.Version(), Equals, int32(0))
 	c.Assert(data, Equals, "new")
 
-	acl, _, err := zk.ACL("/test")
+	acl, _, err := conn.ACL("/test")
 	c.Assert(err, IsNil)
-	c.Assert(acl, Equals, zookeeper.WorldACL(zookeeper.PERM_ALL))
+	c.Assert(acl, Equals, zk.WorldACL(zk.PERM_ALL))
 }
 
 func (s *S) TestRetryChangeSetting(c *C) {
-	zk, _ := s.init(c)
+	conn, _ := s.init(c)
 
-	_, err := zk.Create("/test", "old", zookeeper.EPHEMERAL,
-		zookeeper.WorldACL(zookeeper.PERM_ALL))
+	_, err := conn.Create("/test", "old", zk.EPHEMERAL, zk.WorldACL(zk.PERM_ALL))
 	c.Assert(err, IsNil)
 
-	err = zk.RetryChange("/test", zookeeper.EPHEMERAL, []zookeeper.ACL{},
-		func(data string, stat *zookeeper.Stat) (string, os.Error) {
+	err = conn.RetryChange("/test", zk.EPHEMERAL, []zk.ACL{},
+		func(data string, stat *zk.Stat) (string, os.Error) {
 			c.Assert(data, Equals, "old")
 			c.Assert(stat, NotNil)
 			c.Assert(stat.Version(), Equals, int32(0))
@@ -44,27 +43,26 @@ func (s *S) TestRetryChangeSetting(c *C) {
 		})
 	c.Assert(err, IsNil)
 
-	data, stat, err := zk.Get("/test")
+	data, stat, err := conn.Get("/test")
 	c.Assert(err, IsNil)
 	c.Assert(stat, NotNil)
 	c.Assert(stat.Version(), Equals, int32(1))
 	c.Assert(data, Equals, "brand new")
 
 	// ACL was unchanged by RetryChange().
-	acl, _, err := zk.ACL("/test")
+	acl, _, err := conn.ACL("/test")
 	c.Assert(err, IsNil)
-	c.Assert(acl, Equals, zookeeper.WorldACL(zookeeper.PERM_ALL))
+	c.Assert(acl, Equals, zk.WorldACL(zk.PERM_ALL))
 }
 
 func (s *S) TestRetryChangeUnchangedValueDoesNothing(c *C) {
-	zk, _ := s.init(c)
+	conn, _ := s.init(c)
 
-	_, err := zk.Create("/test", "old", zookeeper.EPHEMERAL,
-		zookeeper.WorldACL(zookeeper.PERM_ALL))
+	_, err := conn.Create("/test", "old", zk.EPHEMERAL, zk.WorldACL(zk.PERM_ALL))
 	c.Assert(err, IsNil)
 
-	err = zk.RetryChange("/test", zookeeper.EPHEMERAL, []zookeeper.ACL{},
-		func(data string, stat *zookeeper.Stat) (string, os.Error) {
+	err = conn.RetryChange("/test", zk.EPHEMERAL, []zk.ACL{},
+		func(data string, stat *zk.Stat) (string, os.Error) {
 			c.Assert(data, Equals, "old")
 			c.Assert(stat, NotNil)
 			c.Assert(stat.Version(), Equals, int32(0))
@@ -72,7 +70,7 @@ func (s *S) TestRetryChangeUnchangedValueDoesNothing(c *C) {
 		})
 	c.Assert(err, IsNil)
 
-	data, stat, err := zk.Get("/test")
+	data, stat, err := conn.Get("/test")
 	c.Assert(err, IsNil)
 	c.Assert(stat, NotNil)
 	c.Assert(stat.Version(), Equals, int32(0)) // Unchanged!
@@ -80,14 +78,14 @@ func (s *S) TestRetryChangeUnchangedValueDoesNothing(c *C) {
 }
 
 func (s *S) TestRetryChangeConflictOnCreate(c *C) {
-	zk, _ := s.init(c)
+	conn, _ := s.init(c)
 
-	changeFunc := func(data string, stat *zookeeper.Stat) (string, os.Error) {
+	changeFunc := func(data string, stat *zk.Stat) (string, os.Error) {
 		switch data {
 		case "":
 			c.Assert(stat, IsNil)
-			_, err := zk.Create("/test", "conflict", zookeeper.EPHEMERAL,
-				zookeeper.WorldACL(zookeeper.PERM_ALL))
+			_, err := conn.Create("/test", "conflict", zk.EPHEMERAL,
+				zk.WorldACL(zk.PERM_ALL))
 			c.Assert(err, IsNil)
 			return "<none> => conflict", nil
 		case "conflict":
@@ -100,11 +98,10 @@ func (s *S) TestRetryChangeConflictOnCreate(c *C) {
 		return "can't happen", nil
 	}
 
-	err := zk.RetryChange("/test", zookeeper.EPHEMERAL, zookeeper.WorldACL(zookeeper.PERM_ALL),
-		changeFunc)
+	err := conn.RetryChange("/test", zk.EPHEMERAL, zk.WorldACL(zk.PERM_ALL), changeFunc)
 	c.Assert(err, IsNil)
 
-	data, stat, err := zk.Get("/test")
+	data, stat, err := conn.Get("/test")
 	c.Assert(err, IsNil)
 	c.Assert(data, Equals, "conflict => new")
 	c.Assert(stat, NotNil)
@@ -112,18 +109,17 @@ func (s *S) TestRetryChangeConflictOnCreate(c *C) {
 }
 
 func (s *S) TestRetryChangeConflictOnSetDueToChange(c *C) {
-	zk, _ := s.init(c)
+	conn, _ := s.init(c)
 
-	_, err := zk.Create("/test", "old", zookeeper.EPHEMERAL,
-		zookeeper.WorldACL(zookeeper.PERM_ALL))
+	_, err := conn.Create("/test", "old", zk.EPHEMERAL, zk.WorldACL(zk.PERM_ALL))
 	c.Assert(err, IsNil)
 
-	changeFunc := func(data string, stat *zookeeper.Stat) (string, os.Error) {
+	changeFunc := func(data string, stat *zk.Stat) (string, os.Error) {
 		switch data {
 		case "old":
 			c.Assert(stat, NotNil)
 			c.Assert(stat.Version(), Equals, int32(0))
-			_, err := zk.Set("/test", "conflict", 0)
+			_, err := conn.Set("/test", "conflict", 0)
 			c.Assert(err, IsNil)
 			return "old => new", nil
 		case "conflict":
@@ -136,10 +132,10 @@ func (s *S) TestRetryChangeConflictOnSetDueToChange(c *C) {
 		return "can't happen", nil
 	}
 
-	err = zk.RetryChange("/test", zookeeper.EPHEMERAL, []zookeeper.ACL{}, changeFunc)
+	err = conn.RetryChange("/test", zk.EPHEMERAL, []zk.ACL{}, changeFunc)
 	c.Assert(err, IsNil)
 
-	data, stat, err := zk.Get("/test")
+	data, stat, err := conn.Get("/test")
 	c.Assert(err, IsNil)
 	c.Assert(data, Equals, "conflict => new")
 	c.Assert(stat, NotNil)
@@ -147,18 +143,17 @@ func (s *S) TestRetryChangeConflictOnSetDueToChange(c *C) {
 }
 
 func (s *S) TestRetryChangeConflictOnSetDueToDelete(c *C) {
-	zk, _ := s.init(c)
+	conn, _ := s.init(c)
 
-	_, err := zk.Create("/test", "old", zookeeper.EPHEMERAL,
-		zookeeper.WorldACL(zookeeper.PERM_ALL))
+	_, err := conn.Create("/test", "old", zk.EPHEMERAL, zk.WorldACL(zk.PERM_ALL))
 	c.Assert(err, IsNil)
 
-	changeFunc := func(data string, stat *zookeeper.Stat) (string, os.Error) {
+	changeFunc := func(data string, stat *zk.Stat) (string, os.Error) {
 		switch data {
 		case "old":
 			c.Assert(stat, NotNil)
 			c.Assert(stat.Version(), Equals, int32(0))
-			err := zk.Delete("/test", 0)
+			err := conn.Delete("/test", 0)
 			c.Assert(err, IsNil)
 			return "old => <deleted>", nil
 		case "":
@@ -170,54 +165,53 @@ func (s *S) TestRetryChangeConflictOnSetDueToDelete(c *C) {
 		return "can't happen", nil
 	}
 
-	err = zk.RetryChange("/test", zookeeper.EPHEMERAL, zookeeper.WorldACL(zookeeper.PERM_READ),
-		changeFunc)
+	err = conn.RetryChange("/test", zk.EPHEMERAL, zk.WorldACL(zk.PERM_READ), changeFunc)
 	c.Assert(err, IsNil)
 
-	data, stat, err := zk.Get("/test")
+	data, stat, err := conn.Get("/test")
 	c.Assert(err, IsNil)
 	c.Assert(data, Equals, "<deleted> => new")
 	c.Assert(stat, NotNil)
 	c.Assert(stat.Version(), Equals, int32(0))
 
 	// Should be the new ACL.
-	acl, _, err := zk.ACL("/test")
+	acl, _, err := conn.ACL("/test")
 	c.Assert(err, IsNil)
-	c.Assert(acl, Equals, zookeeper.WorldACL(zookeeper.PERM_READ))
+	c.Assert(acl, Equals, zk.WorldACL(zk.PERM_READ))
 }
 
 func (s *S) TestRetryChangeErrorInCallback(c *C) {
-	zk, _ := s.init(c)
+	conn, _ := s.init(c)
 
-	err := zk.RetryChange("/test", zookeeper.EPHEMERAL, zookeeper.WorldACL(zookeeper.PERM_ALL),
-		func(data string, stat *zookeeper.Stat) (string, os.Error) {
+	err := conn.RetryChange("/test", zk.EPHEMERAL, zk.WorldACL(zk.PERM_ALL),
+		func(data string, stat *zk.Stat) (string, os.Error) {
 			return "don't use this", os.NewError("BOOM!")
 		})
 	c.Assert(err, NotNil)
 	c.Assert(err.String(), Equals, "BOOM!")
 
-	stat, err := zk.Exists("/test")
+	stat, err := conn.Exists("/test")
 	c.Assert(err, IsNil)
 	c.Assert(stat, IsNil)
 }
 
 func (s *S) TestRetryChangeFailsReading(c *C) {
-	zk, _ := s.init(c)
+	conn, _ := s.init(c)
 
-	_, err := zk.Create("/test", "old", zookeeper.EPHEMERAL,
-		zookeeper.WorldACL(zookeeper.PERM_WRITE)) // Write only!
+	// Write only!
+	_, err := conn.Create("/test", "old", zk.EPHEMERAL, zk.WorldACL(zk.PERM_WRITE))
 	c.Assert(err, IsNil)
 
 	var called bool
-	err = zk.RetryChange("/test", zookeeper.EPHEMERAL, zookeeper.WorldACL(zookeeper.PERM_ALL),
-		func(data string, stat *zookeeper.Stat) (string, os.Error) {
+	err = conn.RetryChange("/test", zk.EPHEMERAL, zk.WorldACL(zk.PERM_ALL),
+		func(data string, stat *zk.Stat) (string, os.Error) {
 			called = true
 			return "", nil
 		})
 	c.Assert(err, NotNil)
-	c.Assert(err, Equals, zookeeper.ZNOAUTH)
+	c.Assert(err, Equals, zk.ZNOAUTH)
 
-	stat, err := zk.Exists("/test")
+	stat, err := conn.Exists("/test")
 	c.Assert(err, IsNil)
 	c.Assert(stat, NotNil)
 	c.Assert(stat.Version(), Equals, int32(0))
@@ -226,21 +220,21 @@ func (s *S) TestRetryChangeFailsReading(c *C) {
 }
 
 func (s *S) TestRetryChangeFailsSetting(c *C) {
-	zk, _ := s.init(c)
+	conn, _ := s.init(c)
 
-	_, err := zk.Create("/test", "old", zookeeper.EPHEMERAL,
-		zookeeper.WorldACL(zookeeper.PERM_READ)) // Read only!
+	// Read only!
+	_, err := conn.Create("/test", "old", zk.EPHEMERAL, zk.WorldACL(zk.PERM_READ))
 	c.Assert(err, IsNil)
 
 	var called bool
-	err = zk.RetryChange("/test", zookeeper.EPHEMERAL, zookeeper.WorldACL(zookeeper.PERM_ALL),
-		func(data string, stat *zookeeper.Stat) (string, os.Error) {
+	err = conn.RetryChange("/test", zk.EPHEMERAL, zk.WorldACL(zk.PERM_ALL),
+		func(data string, stat *zk.Stat) (string, os.Error) {
 			called = true
 			return "", nil
 		})
-	c.Assert(err, Equals, zookeeper.ZNOAUTH)
+	c.Assert(err, Equals, zk.ZNOAUTH)
 
-	stat, err := zk.Exists("/test")
+	stat, err := conn.Exists("/test")
 	c.Assert(err, IsNil)
 	c.Assert(stat, NotNil)
 	c.Assert(stat.Version(), Equals, int32(0))
@@ -249,23 +243,22 @@ func (s *S) TestRetryChangeFailsSetting(c *C) {
 }
 
 func (s *S) TestRetryChangeFailsCreating(c *C) {
-	zk, _ := s.init(c)
+	conn, _ := s.init(c)
 
-	_, err := zk.Create("/test", "old", zookeeper.EPHEMERAL,
-		zookeeper.WorldACL(zookeeper.PERM_READ)) // Read only!
+	// Read only!
+	_, err := conn.Create("/test", "old", zk.EPHEMERAL, zk.WorldACL(zk.PERM_READ))
 	c.Assert(err, IsNil)
 
 	var called bool
-	err = zk.RetryChange("/test/sub", zookeeper.EPHEMERAL,
-		zookeeper.WorldACL(zookeeper.PERM_ALL),
-		func(data string, stat *zookeeper.Stat) (string, os.Error) {
+	err = conn.RetryChange("/test/sub", zk.EPHEMERAL, zk.WorldACL(zk.PERM_ALL),
+		func(data string, stat *zk.Stat) (string, os.Error) {
 			called = true
 			return "", nil
 		})
 	c.Assert(err, NotNil)
-	c.Assert(err, Equals, zookeeper.ZNOAUTH)
+	c.Assert(err, Equals, zk.ZNOAUTH)
 
-	stat, err := zk.Exists("/test/sub")
+	stat, err := conn.Exists("/test/sub")
 	c.Assert(err, IsNil)
 	c.Assert(stat, IsNil)
 

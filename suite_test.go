@@ -1,11 +1,11 @@
-package zookeeper_test
+package zk_test
 
 import (
 	. "launchpad.net/gocheck"
 	"bufio"
 	"exec"
 	"fmt"
-	"launchpad.net/zookeeper"
+	"launchpad.net/gozk/zk"
 	"os"
 	"testing"
 	"time"
@@ -24,26 +24,26 @@ type S struct {
 	zkProcess  *os.Process // The running ZooKeeper process
 	zkAddr     string
 
-	handles     []*zookeeper.Conn
-	events      []*zookeeper.Event
+	handles     []*zk.Conn
+	events      []*zk.Event
 	liveWatches int
 	deadWatches chan bool
 }
 
-var logLevel = 0 //zookeeper.LOG_ERROR
+var logLevel = 0 //zk.LOG_ERROR
 
-func (s *S) init(c *C) (*zookeeper.Conn, chan zookeeper.Event) {
-	zk, watch, err := zookeeper.Dial(s.zkAddr, 5e9)
+func (s *S) init(c *C) (*zk.Conn, chan zk.Event) {
+	conn, watch, err := zk.Dial(s.zkAddr, 5e9)
 	c.Assert(err, IsNil)
 
-	s.handles = append(s.handles, zk)
+	s.handles = append(s.handles, conn)
 
 	event := <-watch
 
-	c.Assert(event.Type, Equals, zookeeper.EVENT_SESSION)
-	c.Assert(event.State, Equals, zookeeper.STATE_CONNECTED)
+	c.Assert(event.Type, Equals, zk.EVENT_SESSION)
+	c.Assert(event.State, Equals, zk.STATE_CONNECTED)
 
-	bufferedWatch := make(chan zookeeper.Event, 256)
+	bufferedWatch := make(chan zk.Event, 256)
 	bufferedWatch <- event
 
 	s.liveWatches += 1
@@ -66,13 +66,13 @@ func (s *S) init(c *C) (*zookeeper.Conn, chan zookeeper.Event) {
 		s.deadWatches <- true
 	}()
 
-	return zk, bufferedWatch
+	return conn, bufferedWatch
 }
 
 func (s *S) SetUpTest(c *C) {
-	c.Assert(zookeeper.CountPendingWatches(), Equals, 0,
+	c.Assert(zk.CountPendingWatches(), Equals, 0,
 		Bug("Test got a dirty watch state before running!"))
-	zookeeper.SetLogLevel(logLevel)
+	zk.SetLogLevel(logLevel)
 }
 
 func (s *S) TearDownTest(c *C) {
@@ -92,9 +92,9 @@ func (s *S) TearDownTest(c *C) {
 	}
 
 	// Reset the list of handles.
-	s.handles = make([]*zookeeper.Conn, 0)
+	s.handles = make([]*zk.Conn, 0)
 
-	c.Assert(zookeeper.CountPendingWatches(), Equals, 0,
+	c.Assert(zk.CountPendingWatches(), Equals, 0,
 		Bug("Test left live watches behind!"))
 }
 
@@ -108,7 +108,7 @@ func (s *S) SetUpSuite(c *C) {
 	s.zkTestPort = 21812
 	s.zkAddr = fmt.Sprint("localhost:", s.zkTestPort)
 
-	s.zkArgs, err = zookeeper.Server(s.zkTestPort, s.zkTestRoot, "")
+	s.zkArgs, err = zk.Server(s.zkTestPort, s.zkTestRoot, "")
 	if err != nil {
 		c.Fatal("Cannot set up server environment: ", err)
 	}

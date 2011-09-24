@@ -1,4 +1,4 @@
-package zookeeper
+package zk
 
 import (
 	"bufio"
@@ -13,12 +13,12 @@ import (
 
 const zookeeperEnviron = "/etc/zookeeper/conf/environment"
 
-// Server sets up a zookeeper server environment inside dataDir
+// Server sets up a ZooKepeer server environment inside dataDir
 // for a server that listens on the specified TCP port, sending
 // all log messages to standard output.
 // The dataDir directory must exist already.
 // 
-// The zookeeper installation directory is specified by installedDir.
+// The ZooKepeer installation directory is specified by installedDir.
 // If this is empty, a system default will be used.
 //
 // Server does not actually start the server. Instead it returns
