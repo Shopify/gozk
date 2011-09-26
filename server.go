@@ -9,52 +9,159 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"strconv"
 )
 
-const zookeeperEnviron = "/etc/zookeeper/conf/environment"
+type Server struct {
+	runDir     string
+	installDir string
+}
 
-// Server sets up a ZooKepeer server environment inside dataDir
-// for a server that listens on the specified TCP port, sending
-// all log messages to standard output.
-// The dataDir directory must exist already.
+// CreateServer creates the directory runDir and sets up a ZooKepeer server
+// environment inside it. It is an error if runDir already exists.
+// The server will listen on the specified TCP port.
 // 
-// The ZooKepeer installation directory is specified by installedDir.
+// The ZooKepeer installation directory is specified by installDir.
 // If this is empty, a system default will be used.
 //
-// Server does not actually start the server. Instead it returns
-// a command line, suitable for passing to exec.Command,
-// for example.
-func Server(port int, dataDir, installedDir string) ([]string, os.Error) {
-	cp, err := classPath(installedDir)
+// CreateServer does not start the server.
+func CreateServer(port int, runDir, installDir string) (*Server, os.Error) {
+	if err := os.Mkdir(runDir, 0777); err != nil {
+		return nil, err
+	}
+	srv := &Server{runDir: runDir, installDir: installDir}
+	if err := srv.writeLog4JConfig(); err != nil {
+		return nil, err
+	}
+	if err := srv.writeZooKeeperConfig(port); err != nil {
+		return nil, err
+	}
+	if err := srv.writeInstallDir(); err != nil {
+		return nil, err
+	}
+	return srv, nil
+}
+
+// AttachServer creates a new ZooKeeper Server instance
+// to operate inside an existing run directory, runDir.
+// The directory must have been created with CreateServer.
+func AttachServer(runDir string) (*Server, os.Error) {
+	srv := &Server{runDir: runDir}
+	if err := srv.readInstallDir(); err != nil {
+		return nil, fmt.Errorf("cannot read server install directory: %v", err)
+	}
+	return srv, nil
+}
+
+// readProcess returns a Process referring to the running server from
+// where it's been stored in pid.txt. If the file does not
+// exist, it assumes the server is not running and returns (nil, nil).
+//
+func (srv *Server) getServerProcess() (*os.Process, os.Error) {
+	data, err := ioutil.ReadFile(srv.path("pid.txt"))
 	if err != nil {
+		if err, ok := err.(*os.PathError); ok && err.Error == os.ENOENT {
+			return nil, nil
+		}
 		return nil, err
 	}
-	logDir := filepath.Join(dataDir, "log")
-	if err = os.Mkdir(logDir, 0777); err != nil && err.(*os.PathError).Error != os.EEXIST {
-		return nil, err
-	}
-	logConfigPath, err := writeLog4JConfig(dataDir)
+	pid, err := strconv.Atoi(string(data))
 	if err != nil {
-		return nil, err
+		return nil, os.NewError("bad process id found in pid.txt")
 	}
-	configPath, err := writeZooKeeperConfig(dataDir, port)
+	return os.FindProcess(pid)
+}
+
+func (srv *Server) path(name string) string {
+	return filepath.Join(srv.runDir, name)
+}
+
+// Start starts the ZooKeeper server running.
+func (srv *Server) Start() os.Error {
+	p, err := srv.getServerProcess()
+	if p != nil || err != nil {
+		if p != nil {
+			p.Release()
+		}
+		return fmt.Errorf("ZooKeeper server may already be running (remove %q to clear)", srv.path("pid.txt"))
+	}
+
+	// open the pid file before starting the process so that if we get two
+	// programs trying to concurrently start a server on the same directory
+	// at the same time, only one should succeed.
+	pidf, err := os.OpenFile(srv.path("pid.txt"), os.O_EXCL|os.O_CREATE|os.O_WRONLY, 0666)
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("cannot create pid.txt: %v", err)
 	}
-	exe, err := exec.LookPath("java")
+	defer pidf.Close()
+
+	cp, err := srv.classPath()
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("cannot get class path: ", err)
 	}
-	cmd := []string{
-		exe,
+	cmd := exec.Command(
+		"java",
 		"-cp", strings.Join(cp, ":"),
-		"-Dzookeeper.log.dir=" + logDir,
 		"-Dzookeeper.root.logger=INFO,CONSOLE",
-		"-Dlog4j.configuration=file:" + logConfigPath,
+		"-Dlog4j.configuration=file:"+srv.path("log4j.properties"),
 		"org.apache.zookeeper.server.quorum.QuorumPeerMain",
-		configPath,
+		srv.path("zoo.cfg"),
+	)
+	// We open the log file here so that we have one log file for both
+	// stdout/stderr messages (e.g. when the class path is incorrect)
+	// and for the ZooKeeper log messages themselves.
+	logf, err := os.OpenFile(srv.path("log.txt"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
+	if err != nil {
+		return fmt.Errorf("cannot create log file: %v", err)
 	}
-	return cmd, nil
+	defer logf.Close()
+	cmd.Stdout = logf
+	cmd.Stderr = logf
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("cannot start server: %v", err)
+	}
+	if _, err := fmt.Fprint(pidf, cmd.Process.Pid); err != nil {
+		return fmt.Errorf("cannot write pid file: %v", err)
+	}
+	return nil
+}
+
+// Stop kills the ZooKeeper server. It is a no-op if it is already running
+func (srv *Server) Stop() os.Error {
+	p, err := srv.getServerProcess()
+	if p == nil {
+		if err != nil {
+			return fmt.Errorf("cannot read process ID of server: %v", err)
+		}
+		return nil
+	}
+	defer p.Release()
+	if err := p.Kill(); err != nil {
+		return fmt.Errorf("cannot kill server process: %v", err)
+	}
+	// ignore the error returned from Wait because there's little
+	// we can do about it - it either means that the process has just exited
+	// anyway or something else has happened which probably doesn't
+	// have anything to do with stopping the server.
+	p.Wait(0)
+
+	if err := os.Remove(srv.path("pid.txt")); err != nil {
+		return fmt.Errorf("cannot remove server process ID file: %v", err)
+	}
+	return nil
+}
+
+// Destroy stops the ZooKeeper server if it is running,
+// and then removes its run directory and all its contents.
+// Warning: this will destroy all data associated with the server.
+func (srv *Server) Destroy() os.Error {
+	if err := srv.Stop(); err != nil {
+		return err
+	}
+	if err := os.RemoveAll(srv.runDir); err != nil {
+		return err
+	}
+	return nil
 }
 
 var log4jProperties = `
@@ -65,24 +172,37 @@ log4j.appender.CONSOLE.layout=org.apache.log4j.PatternLayout
 log4j.appender.CONSOLE.layout.ConversionPattern=%d{ISO8601} - %-5p [%t:%C{1}@%L] - %m%n
 `
 
-func writeLog4JConfig(dir string) (path string, err os.Error) {
-	path = filepath.Join(dir, "log4j.properties")
-	err = ioutil.WriteFile(path, []byte(log4jProperties), 0666)
-	return
+func (srv *Server) writeLog4JConfig() (err os.Error) {
+	return ioutil.WriteFile(srv.path("log4j.properties"), []byte(log4jProperties), 0666)
 }
 
-func writeZooKeeperConfig(dir string, port int) (path string, err os.Error) {
-	path = filepath.Join(dir, "zoo.cfg")
-	err = ioutil.WriteFile(path, []byte(fmt.Sprintf(
+func (srv *Server) writeZooKeeperConfig(port int) (err os.Error) {
+	return ioutil.WriteFile(srv.path("zoo.cfg"), []byte(fmt.Sprintf(
 		"tickTime=2000\n"+
 			"dataDir=%s\n"+
 			"clientPort=%d\n"+
 			"maxClientCnxns=500\n",
-		dir, port)), 0666)
-	return
+		srv.runDir, port)), 0666)
 }
 
-func classPath(dir string) ([]string, os.Error) {
+func (srv *Server) writeInstallDir() os.Error {
+	return ioutil.WriteFile(srv.path("installdir.txt"), []byte(srv.installDir+"\n"), 0666)
+}
+
+func (srv *Server) readInstallDir() os.Error {
+	data, err := ioutil.ReadFile(srv.path("installdir.txt"))
+	if err != nil {
+		return err
+	}
+	if data[len(data)-1] == '\n' {
+		data = data[0 : len(data)-1]
+	}
+	srv.installDir = string(data)
+	return nil
+}
+
+func (srv *Server) classPath() ([]string, os.Error) {
+	dir := srv.installDir
 	if dir == "" {
 		return systemClassPath()
 	}
@@ -110,6 +230,8 @@ func classPath(dir string) ([]string, os.Error) {
 	}
 	return classPath, nil
 }
+
+const zookeeperEnviron = "/etc/zookeeper/conf/environment"
 
 func systemClassPath() ([]string, os.Error) {
 	f, err := os.Open(zookeeperEnviron)

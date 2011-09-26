@@ -561,9 +561,9 @@ func (s *S) TestWatchOnReconnection(c *C) {
 
 	c.Check(zk.CountPendingWatches(), Equals, 2)
 
-	s.StopZK()
+	s.zkServer.Stop()
 	time.Sleep(2e9)
-	s.StartZK(c)
+	s.zkServer.Start()
 
 	// The session channel should receive the reconnection notification.
 	select {
