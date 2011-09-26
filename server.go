@@ -12,6 +12,7 @@ import (
 	"strconv"
 )
 
+// Server represents a ZooKeeper server, its data and configuration files.
 type Server struct {
 	runDir     string
 	installDir string
@@ -53,7 +54,7 @@ func AttachServer(runDir string) (*Server, os.Error) {
 	return srv, nil
 }
 
-// readProcess returns a Process referring to the running server from
+// getServerProcess returns a Process referring to the running server from
 // where it's been stored in pid.txt. If the file does not
 // exist, it assumes the server is not running and returns (nil, nil).
 //
@@ -76,7 +77,8 @@ func (srv *Server) path(name string) string {
 	return filepath.Join(srv.runDir, name)
 }
 
-// Start starts the ZooKeeper server running.
+// Start starts the ZooKeeper server.
+// It returns an error if the server is already running.
 func (srv *Server) Start() os.Error {
 	p, err := srv.getServerProcess()
 	if p != nil || err != nil {
@@ -126,7 +128,7 @@ func (srv *Server) Start() os.Error {
 	return nil
 }
 
-// Stop kills the ZooKeeper server. It is a no-op if it is already running
+// Stop kills the ZooKeeper server. It is a no-op if it is already running.
 func (srv *Server) Stop() os.Error {
 	p, err := srv.getServerProcess()
 	if p == nil {
@@ -141,8 +143,8 @@ func (srv *Server) Stop() os.Error {
 	}
 	// ignore the error returned from Wait because there's little
 	// we can do about it - it either means that the process has just exited
-	// anyway or something else has happened which probably doesn't
-	// have anything to do with stopping the server.
+	// anyway or that we can't wait for it for some other reason,
+	// for example because it was originally started by some other process.
 	p.Wait(0)
 
 	if err := os.Remove(srv.path("pid.txt")); err != nil {
@@ -151,8 +153,8 @@ func (srv *Server) Stop() os.Error {
 	return nil
 }
 
-// Destroy stops the ZooKeeper server if it is running,
-// and then removes its run directory and all its contents.
+// Destroy stops the ZooKeeper server, and then removes its run
+// directory and all its contents.
 // Warning: this will destroy all data associated with the server.
 func (srv *Server) Destroy() os.Error {
 	if err := srv.Stop(); err != nil {
