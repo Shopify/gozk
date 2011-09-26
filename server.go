@@ -18,11 +18,11 @@ type Server struct {
 	installDir string
 }
 
-// CreateServer creates the directory runDir and sets up a ZooKepeer server
+// CreateServer creates the directory runDir and sets up a ZooKeeper server
 // environment inside it. It is an error if runDir already exists.
 // The server will listen on the specified TCP port.
 // 
-// The ZooKepeer installation directory is specified by installDir.
+// The ZooKeeper installation directory is specified by installDir.
 // If this is empty, a system default will be used.
 //
 // CreateServer does not start the server.
