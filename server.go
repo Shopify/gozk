@@ -3,34 +3,33 @@ package zk
 import (
 	"bufio"
 	"bytes"
-	"exec"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
-	"strconv"
 )
 
 // Server represents a ZooKeeper server, its data and configuration files.
 type Server struct {
-	runDir     string
-	installDir string
+	runDir string
+	zkDir  string
 }
 
 // CreateServer creates the directory runDir and sets up a ZooKeeper server
 // environment inside it. It is an error if runDir already exists.
 // The server will listen on the specified TCP port.
 // 
-// The ZooKeeper installation directory is specified by installDir.
+// The ZooKeeper installation directory is specified by zkDir.
 // If this is empty, a system default will be used.
 //
 // CreateServer does not start the server.
-func CreateServer(port int, runDir, installDir string) (*Server, os.Error) {
+func CreateServer(port int, runDir, zkDir string) (*Server, os.Error) {
 	if err := os.Mkdir(runDir, 0777); err != nil {
 		return nil, err
 	}
-	srv := &Server{runDir: runDir, installDir: installDir}
+	srv := &Server{runDir: runDir, zkDir: zkDir}
 	if err := srv.writeLog4JConfig(); err != nil {
 		return nil, err
 	}
@@ -54,116 +53,56 @@ func AttachServer(runDir string) (*Server, os.Error) {
 	return srv, nil
 }
 
-// getServerProcess returns a Process referring to the running server from
-// where it's been stored in pid.txt. If the file does not
-// exist, it assumes the server is not running and returns (nil, nil).
-//
-func (srv *Server) getServerProcess() (*os.Process, os.Error) {
-	data, err := ioutil.ReadFile(srv.path("pid.txt"))
+func (srv *Server) checkAvailability() os.Error {
+	port, err := srv.networkPort()
 	if err != nil {
-		if err, ok := err.(*os.PathError); ok && err.Error == os.ENOENT {
-			return nil, nil
-		}
-		return nil, err
+		return fmt.Errorf("cannot get network port: %v", err)
 	}
-	pid, err := strconv.Atoi(string(data))
+	l, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", port))
 	if err != nil {
-		return nil, os.NewError("bad process id found in pid.txt")
+		return fmt.Errorf("cannot listen on port %v: %v", port, err)
 	}
-	return os.FindProcess(pid)
+	l.Close()
+	return nil
 }
 
-func (srv *Server) path(name string) string {
-	return filepath.Join(srv.runDir, name)
+// NetworkPort returns the TCP port number that
+// the server is configured for.
+func (srv *Server) networkPort() (int, os.Error) {
+	f, err := os.Open(srv.path("zoo.cfg"))
+	if err != nil {
+		return 0, err
+	}
+	r := bufio.NewReader(f)
+	for {
+		line, err := r.ReadSlice('\n')
+		if err != nil {
+			return 0, fmt.Errorf("cannot get port from %q", srv.path("zoo.cfg"))
+		}
+		var port int
+		if n, _ := fmt.Sscanf(string(line), "clientPort=%d\n", &port); n == 1 {
+			return port, nil
+		}
+	}
+	panic("not reached")
 }
 
-// Start starts the ZooKeeper server.
-// It returns an error if the server is already running.
-func (srv *Server) Start() os.Error {
-	p, err := srv.getServerProcess()
-	if p != nil || err != nil {
-		if p != nil {
-			p.Release()
-		}
-		return fmt.Errorf("ZooKeeper server may already be running (remove %q to clear)", srv.path("pid.txt"))
-	}
-
-	// open the pid file before starting the process so that if we get two
-	// programs trying to concurrently start a server on the same directory
-	// at the same time, only one should succeed.
-	pidf, err := os.OpenFile(srv.path("pid.txt"), os.O_EXCL|os.O_CREATE|os.O_WRONLY, 0666)
-	if err != nil {
-		return fmt.Errorf("cannot create pid.txt: %v", err)
-	}
-	defer pidf.Close()
-
+// ServerCommand returns the command used to start the
+// ZooKeeper server. It is provided for debugging and testing
+// purposes only.
+func (srv *Server) command() ([]string, os.Error) {
 	cp, err := srv.classPath()
 	if err != nil {
-		return fmt.Errorf("cannot get class path: ", err)
+		return nil, fmt.Errorf("cannot get class path: %v", err)
 	}
-	cmd := exec.Command(
+	return []string{
 		"java",
 		"-cp", strings.Join(cp, ":"),
 		"-Dzookeeper.root.logger=INFO,CONSOLE",
-		"-Dlog4j.configuration=file:"+srv.path("log4j.properties"),
+		"-Dlog4j.configuration=file:" + srv.path("log4j.properties"),
 		"org.apache.zookeeper.server.quorum.QuorumPeerMain",
 		srv.path("zoo.cfg"),
-	)
-	// We open the log file here so that we have one log file for both
-	// stdout/stderr messages (e.g. when the class path is incorrect)
-	// and for the ZooKeeper log messages themselves.
-	logf, err := os.OpenFile(srv.path("log.txt"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
-	if err != nil {
-		return fmt.Errorf("cannot create log file: %v", err)
-	}
-	defer logf.Close()
-	cmd.Stdout = logf
-	cmd.Stderr = logf
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("cannot start server: %v", err)
-	}
-	if _, err := fmt.Fprint(pidf, cmd.Process.Pid); err != nil {
-		return fmt.Errorf("cannot write pid file: %v", err)
-	}
-	return nil
-}
-
-// Stop kills the ZooKeeper server. It is a no-op if it is already running.
-func (srv *Server) Stop() os.Error {
-	p, err := srv.getServerProcess()
-	if p == nil {
-		if err != nil {
-			return fmt.Errorf("cannot read process ID of server: %v", err)
-		}
-		return nil
-	}
-	defer p.Release()
-	if err := p.Kill(); err != nil {
-		return fmt.Errorf("cannot kill server process: %v", err)
-	}
-	// ignore the error returned from Wait because there's little
-	// we can do about it - it either means that the process has just exited
-	// anyway or that we can't wait for it for some other reason,
-	// for example because it was originally started by some other process.
-	p.Wait(0)
-
-	if err := os.Remove(srv.path("pid.txt")); err != nil {
-		return fmt.Errorf("cannot remove server process ID file: %v", err)
-	}
-	return nil
-}
-
-// Destroy stops the ZooKeeper server, and then removes its run
-// directory and all its contents.
-// Warning: this will destroy all data associated with the server.
-func (srv *Server) Destroy() os.Error {
-	if err := srv.Stop(); err != nil {
-		return err
-	}
-	if err := os.RemoveAll(srv.runDir); err != nil {
-		return err
-	}
-	return nil
+	}, nil
 }
 
 var log4jProperties = `
@@ -188,7 +127,7 @@ func (srv *Server) writeZooKeeperConfig(port int) (err os.Error) {
 }
 
 func (srv *Server) writeInstallDir() os.Error {
-	return ioutil.WriteFile(srv.path("installdir.txt"), []byte(srv.installDir+"\n"), 0666)
+	return ioutil.WriteFile(srv.path("installdir.txt"), []byte(srv.zkDir+"\n"), 0666)
 }
 
 func (srv *Server) readInstallDir() os.Error {
@@ -199,12 +138,12 @@ func (srv *Server) readInstallDir() os.Error {
 	if data[len(data)-1] == '\n' {
 		data = data[0 : len(data)-1]
 	}
-	srv.installDir = string(data)
+	srv.zkDir = string(data)
 	return nil
 }
 
 func (srv *Server) classPath() ([]string, os.Error) {
-	dir := srv.installDir
+	dir := srv.zkDir
 	if dir == "" {
 		return systemClassPath()
 	}
@@ -287,4 +226,8 @@ func checkDirectory(path string) os.Error {
 		return err
 	}
 	return nil
+}
+
+func (srv *Server) path(name string) string {
+	return filepath.Join(srv.runDir, name)
 }
