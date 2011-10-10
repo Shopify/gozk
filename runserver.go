@@ -5,25 +5,25 @@ package zk
 // itself, and may be factored out at a later date.
 
 import (
-	"os"
+	"exec"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"strconv"
-	"exec"
 	"time"
 )
 
-var ErrNotRunning = os.NewError("process not running")
+var NotRunning = os.NewError("process not running")
 
 // Process returns a Process referring to the running server from
 // where it's been stored in pid.txt. If the file does not
 // exist, or it cannot find the process, it returns the error
-// ErrNotRunning.
+// NotRunning.
 func (srv *Server) Process() (*os.Process, os.Error) {
 	data, err := ioutil.ReadFile(srv.path("pid.txt"))
 	if err != nil {
 		if err, ok := err.(*os.PathError); ok && err.Error == os.ENOENT {
-			return nil, ErrNotRunning
+			return nil, NotRunning
 		}
 		return nil, err
 	}
@@ -34,10 +34,10 @@ func (srv *Server) Process() (*os.Process, os.Error) {
 	return getProcess(pid)
 }
 
-// getProcess gets a Process from a pid and check that the
+// getProcess gets a Process from a pid and checks that the
 // process is actually running. If the process
 // is not running, then getProcess returns a nil
-// Process and the error ErrNotRunning.
+// Process and the error NotRunning.
 func getProcess(pid int) (*os.Process, os.Error) {
 	p, err := os.FindProcess(pid)
 	if err != nil {
@@ -51,7 +51,7 @@ func getProcess(pid int) (*os.Process, os.Error) {
 		return p, nil
 	}
 	if err, ok := err.(os.Errno); ok && err == os.ESRCH {
-		return nil, ErrNotRunning
+		return nil, NotRunning
 	}
 	return nil, os.NewError("server running but inaccessible")
 }
@@ -63,7 +63,7 @@ func (srv *Server) Start() os.Error {
 		return err
 	}
 	p, err := srv.Process()
-	if err == nil || err != ErrNotRunning {
+	if err == nil || err != NotRunning {
 		if p != nil {
 			p.Release()
 		}
@@ -139,8 +139,8 @@ func (srv *Server) Stop() os.Error {
 		// but not as a child of this process, so the only thing we can do
 		// is to poll until it exits. If the process has taken longer than
 		// a second to exit, then it's probably not going to.
-		for i := 0; i < 4; i++ {
-			time.Sleep(0.25e9)
+		for i := 0; i < 5*4; i++ {
+			time.Sleep(1e9 / 4)
 			if np, err := getProcess(p.Pid); err != nil {
 				break
 			} else {

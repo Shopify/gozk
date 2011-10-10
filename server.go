@@ -36,7 +36,7 @@ func CreateServer(port int, runDir, zkDir string) (*Server, os.Error) {
 	if err := srv.writeZooKeeperConfig(port); err != nil {
 		return nil, err
 	}
-	if err := srv.writeInstallDir(); err != nil {
+	if err := srv.writeZkDir(); err != nil {
 		return nil, err
 	}
 	return srv, nil
@@ -47,7 +47,7 @@ func CreateServer(port int, runDir, zkDir string) (*Server, os.Error) {
 // The directory must have been created with CreateServer.
 func AttachServer(runDir string) (*Server, os.Error) {
 	srv := &Server{runDir: runDir}
-	if err := srv.readInstallDir(); err != nil {
+	if err := srv.readZkDir(); err != nil {
 		return nil, fmt.Errorf("cannot read server install directory: %v", err)
 	}
 	return srv, nil
@@ -66,7 +66,7 @@ func (srv *Server) checkAvailability() os.Error {
 	return nil
 }
 
-// NetworkPort returns the TCP port number that
+// networkPort returns the TCP port number that
 // the server is configured for.
 func (srv *Server) networkPort() (int, os.Error) {
 	f, err := os.Open(srv.path("zoo.cfg"))
@@ -87,9 +87,8 @@ func (srv *Server) networkPort() (int, os.Error) {
 	panic("not reached")
 }
 
-// ServerCommand returns the command used to start the
-// ZooKeeper server. It is provided for debugging and testing
-// purposes only.
+// command returns the command used to start the
+// ZooKeeper server.
 func (srv *Server) command() ([]string, os.Error) {
 	cp, err := srv.classPath()
 	if err != nil {
@@ -126,17 +125,14 @@ func (srv *Server) writeZooKeeperConfig(port int) (err os.Error) {
 		srv.runDir, port)), 0666)
 }
 
-func (srv *Server) writeInstallDir() os.Error {
-	return ioutil.WriteFile(srv.path("installdir.txt"), []byte(srv.zkDir+"\n"), 0666)
+func (srv *Server) writeZkDir() os.Error {
+	return ioutil.WriteFile(srv.path("zkdir.txt"), []byte(srv.zkDir), 0666)
 }
 
-func (srv *Server) readInstallDir() os.Error {
-	data, err := ioutil.ReadFile(srv.path("installdir.txt"))
+func (srv *Server) readZkDir() os.Error {
+	data, err := ioutil.ReadFile(srv.path("zkdir.txt"))
 	if err != nil {
 		return err
-	}
-	if data[len(data)-1] == '\n' {
-		data = data[0 : len(data)-1]
 	}
 	srv.zkDir = string(data)
 	return nil

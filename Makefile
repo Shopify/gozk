@@ -6,7 +6,7 @@ TARG=launchpad.net/gozk/zk
 
 GOFILES=\
 	server.go\
-	service.go\
+	runserver.go\
 	
 CGOFILES=\
 	zk.go\
