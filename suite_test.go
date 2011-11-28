@@ -5,7 +5,7 @@ import (
 	"bufio"
 	"exec"
 	"fmt"
-	"launchpad.net/gozk/zk"
+	zk "launchpad.net/gozk/zookeeper"
 	"os"
 	"testing"
 	"time"
