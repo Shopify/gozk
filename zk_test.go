@@ -25,7 +25,7 @@ func (s *S) TestInitErrorThroughErrno(c *C) {
 	}
 	c.Assert(conn, IsNil)
 	c.Assert(watch, IsNil)
-	c.Assert(err, Matches, "invalid argument")
+	c.Assert(err, ErrorMatches, "invalid argument")
 }
 
 func (s *S) TestRecvTimeoutInitParameter(c *C) {
@@ -42,7 +42,7 @@ func (s *S) TestRecvTimeoutInitParameter(c *C) {
 	for i := 0; i != 1000; i++ {
 		_, _, err := conn.Get("/zookeeper")
 		if err != nil {
-			c.Assert(err, Matches, "operation timeout")
+			c.Assert(err, ErrorMatches, "operation timeout")
 			c.SucceedNow()
 		}
 	}
@@ -158,7 +158,7 @@ func (s *S) TestGetAndError(c *C) {
 
 	c.Assert(data, Equals, "")
 	c.Assert(stat, IsNil)
-	c.Assert(err, Matches, "no node")
+	c.Assert(err, ErrorMatches, "no node")
 	c.Assert(err, Equals, zk.ZNONODE)
 }
 
@@ -171,7 +171,7 @@ func (s *S) TestCreateAndGet(c *C) {
 
 	// Check the error condition from Create().
 	_, err = conn.Create(path, "", zk.EPHEMERAL, zk.WorldACL(zk.PERM_ALL))
-	c.Assert(err, Matches, "node exists")
+	c.Assert(err, ErrorMatches, "node exists")
 
 	data, _, err := conn.Get(path)
 	c.Assert(err, IsNil)
@@ -302,7 +302,7 @@ func (s *S) TestChildren(c *C) {
 	children, stat, err = conn.Children("/non-existent")
 	c.Assert(err, NotNil)
 	c.Assert(err, Equals, zk.ZNONODE)
-	c.Assert(children, Equals, []string{})
+	c.Assert(len(children), Equals, 0)
 	c.Assert(stat, IsNil)
 }
 

@@ -1,12 +1,12 @@
 package zk_test
 
 import (
-	. "launchpad.net/gocheck"
 	"bufio"
-	"exec"
 	"fmt"
+	. "launchpad.net/gocheck"
 	"launchpad.net/gozk/zk"
 	"os"
+	"os/exec"
 	"testing"
 	"time"
 )
@@ -101,7 +101,7 @@ func (s *S) TearDownTest(c *C) {
 // We use the suite set up and tear down to manage a custom ZooKeeper
 //
 func (s *S) SetUpSuite(c *C) {
-	var err os.Error
+	var err error
 	s.deadWatches = make(chan bool)
 
 	s.zkTestRoot = c.MkDir()

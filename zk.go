@@ -9,7 +9,7 @@
 package zk
 
 /*
-#cgo CFLAGS: -I/usr/include/c-client-src
+#cgo CFLAGS: -I/usr/include/c-client-src -I/usr/include/zookeeper
 #cgo LDFLAGS: -lzookeeper_mt
 
 #include <zookeeper.h>
@@ -19,9 +19,8 @@ import "C"
 
 import (
 	"fmt"
-	"unsafe"
 	"sync"
-	"os"
+	"unsafe"
 )
 
 // -----------------------------------------------------------------------
@@ -127,14 +126,14 @@ const (
 	ZSESSIONMOVED            Error = C.ZSESSIONMOVED
 )
 
-func (error Error) String() string {
+func (error Error) Error() string {
 	return C.GoString(C.zerror(C.int(error))) // Static, no need to free it.
 }
 
 // zkError creates an appropriate error return from
 // a ZooKeeper status and the errno return from a C API
 // call.
-func zkError(rc C.int, cerr os.Error) os.Error {
+func zkError(rc C.int, cerr error) error {
 	code := Error(rc)
 	switch code {
 	case ZOK:
@@ -372,17 +371,17 @@ func SetLogLevel(level int) {
 // The watch channel receives events of type SESSION_EVENT when any change
 // to the state of the established connection happens.  See the documentation
 // for the Event type for more details.
-func Dial(servers string, recvTimeoutNS int64) (*Conn, <-chan Event, os.Error) {
+func Dial(servers string, recvTimeoutNS int64) (*Conn, <-chan Event, error) {
 	return dial(servers, recvTimeoutNS, nil)
 }
 
 // Redial is equivalent to Dial, but attempts to reestablish an existing session
 // identified via the clientId parameter.
-func Redial(servers string, recvTimeoutNS int64, clientId *ClientId) (*Conn, <-chan Event, os.Error) {
+func Redial(servers string, recvTimeoutNS int64, clientId *ClientId) (*Conn, <-chan Event, error) {
 	return dial(servers, recvTimeoutNS, clientId)
 }
 
-func dial(servers string, recvTimeoutNS int64, clientId *ClientId) (*Conn, <-chan Event, os.Error) {
+func dial(servers string, recvTimeoutNS int64, clientId *ClientId) (*Conn, <-chan Event, error) {
 	conn := &Conn{}
 	conn.watchChannels = make(map[uintptr]chan Event)
 
@@ -413,7 +412,7 @@ func (conn *Conn) ClientId() *ClientId {
 }
 
 // Close terminates the ZooKeeper interaction.
-func (conn *Conn) Close() os.Error {
+func (conn *Conn) Close() error {
 
 	// Protect from concurrency around conn.handle change.
 	conn.mutex.Lock()
@@ -438,7 +437,7 @@ func (conn *Conn) Close() os.Error {
 // Get returns the data and status from an existing node.  err will be nil,
 // unless an error is found. Attempting to retrieve data from a non-existing
 // node is an error.
-func (conn *Conn) Get(path string) (data string, stat *Stat, err os.Error) {
+func (conn *Conn) Get(path string) (data string, stat *Stat, err error) {
 
 	cpath := C.CString(path)
 	cbuffer := (*C.char)(C.malloc(bufferSize))
@@ -460,7 +459,7 @@ func (conn *Conn) Get(path string) (data string, stat *Stat, err os.Error) {
 // a single Event value when the data or existence of the given ZooKeeper
 // node changes or when critical session events happen.  See the
 // documentation of the Event type for more details.
-func (conn *Conn) GetW(path string) (data string, stat *Stat, watch <-chan Event, err os.Error) {
+func (conn *Conn) GetW(path string) (data string, stat *Stat, watch <-chan Event, err error) {
 
 	cpath := C.CString(path)
 	cbuffer := (*C.char)(C.malloc(bufferSize))
@@ -483,7 +482,7 @@ func (conn *Conn) GetW(path string) (data string, stat *Stat, watch <-chan Event
 
 // Children returns the children list and status from an existing node.
 // Attempting to retrieve the children list from a non-existent node is an error.
-func (conn *Conn) Children(path string) (children []string, stat *Stat, err os.Error) {
+func (conn *Conn) Children(path string) (children []string, stat *Stat, err error) {
 
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
@@ -508,7 +507,7 @@ func (conn *Conn) Children(path string) (children []string, stat *Stat, err os.E
 // receive a single Event value when a node is added or removed under the
 // provided path or when critical session events happen.  See the documentation
 // of the Event type for more details.
-func (conn *Conn) ChildrenW(path string) (children []string, stat *Stat, watch <-chan Event, err os.Error) {
+func (conn *Conn) ChildrenW(path string) (children []string, stat *Stat, watch <-chan Event, err error) {
 
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
@@ -549,7 +548,7 @@ func parseStringVector(cvector *C.struct_String_vector) []string {
 // Exists checks if a node exists at the given path.  If it does,
 // stat will contain meta information on the existing node, otherwise
 // it will be nil.
-func (conn *Conn) Exists(path string) (stat *Stat, err os.Error) {
+func (conn *Conn) Exists(path string) (stat *Stat, err error) {
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
 
@@ -572,7 +571,7 @@ func (conn *Conn) Exists(path string) (stat *Stat, err os.Error) {
 // stat is nil and the node didn't exist, or when the existing node
 // is removed. It will also receive critical session events. See the
 // documentation of the Event type for more details.
-func (conn *Conn) ExistsW(path string) (stat *Stat, watch <-chan Event, err os.Error) {
+func (conn *Conn) ExistsW(path string) (stat *Stat, watch <-chan Event, err error) {
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
 
@@ -606,7 +605,7 @@ func (conn *Conn) ExistsW(path string) (stat *Stat, watch <-chan Event, err os.E
 // The returned path is useful in cases where the created path may differ
 // from the requested one, such as when a sequence number is appended
 // to it due to the use of the gozk.SEQUENCE flag.
-func (conn *Conn) Create(path, value string, flags int, aclv []ACL) (pathCreated string, err os.Error) {
+func (conn *Conn) Create(path, value string, flags int, aclv []ACL) (pathCreated string, err error) {
 	cpath := C.CString(path)
 	cvalue := C.CString(value)
 	defer C.free(unsafe.Pointer(cpath))
@@ -637,7 +636,7 @@ func (conn *Conn) Create(path, value string, flags int, aclv []ACL) (pathCreated
 //
 // It is an error to attempt to set the data of a non-existing node with
 // this function. In these cases, use Create instead.
-func (conn *Conn) Set(path, value string, version int32) (stat *Stat, err os.Error) {
+func (conn *Conn) Set(path, value string, version int32) (stat *Stat, err error) {
 
 	cpath := C.CString(path)
 	cvalue := C.CString(value)
@@ -657,7 +656,7 @@ func (conn *Conn) Set(path, value string, version int32) (stat *Stat, err os.Err
 // Delete removes the node at path. If version is not -1, the operation
 // will only succeed if the node is still at this version when the
 // node is deleted as an atomic operation.
-func (conn *Conn) Delete(path string, version int32) (err os.Error) {
+func (conn *Conn) Delete(path string, version int32) (err error) {
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
 	rc, cerr := C.zoo_delete(conn.handle, cpath, C.int(version))
@@ -669,7 +668,7 @@ func (conn *Conn) Delete(path string, version int32) (err os.Error) {
 // authentication information, while the cert parameter provides the
 // identity data itself. For instance, the "digest" scheme requires
 // a pair like "username:password" to be provided as the certificate.
-func (conn *Conn) AddAuth(scheme, cert string) os.Error {
+func (conn *Conn) AddAuth(scheme, cert string) error {
 	cscheme := C.CString(scheme)
 	ccert := C.CString(cert)
 	defer C.free(unsafe.Pointer(cscheme))
@@ -693,7 +692,7 @@ func (conn *Conn) AddAuth(scheme, cert string) os.Error {
 }
 
 // ACL returns the access control list for path.
-func (conn *Conn) ACL(path string) ([]ACL, *Stat, os.Error) {
+func (conn *Conn) ACL(path string) ([]ACL, *Stat, error) {
 
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
@@ -712,7 +711,7 @@ func (conn *Conn) ACL(path string) ([]ACL, *Stat, os.Error) {
 }
 
 // SetACL changes the access control list for path.
-func (conn *Conn) SetACL(path string, aclv []ACL, version int32) os.Error {
+func (conn *Conn) SetACL(path string, aclv []ACL, version int32) error {
 
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
@@ -769,7 +768,7 @@ func buildACLVector(aclv []ACL) *C.struct_ACL_vector {
 // -----------------------------------------------------------------------
 // RetryChange utility method.
 
-type ChangeFunc func(oldValue string, oldStat *Stat) (newValue string, err os.Error)
+type ChangeFunc func(oldValue string, oldStat *Stat) (newValue string, err error)
 
 // RetryChange runs changeFunc to attempt to atomically change path
 // in a lock free manner, and retries in case there was another
@@ -800,7 +799,7 @@ type ChangeFunc func(oldValue string, oldStat *Stat) (newValue string, err os.Er
 // in the same node), repeat from step 1.  If this procedure fails with any
 // other error, stop and return the error found.
 //
-func (conn *Conn) RetryChange(path string, flags int, acl []ACL, changeFunc ChangeFunc) os.Error {
+func (conn *Conn) RetryChange(path string, flags int, acl []ACL, changeFunc ChangeFunc) error {
 	for {
 		oldValue, oldStat, err := conn.Get(path)
 		if err != nil && err != ZNONODE {
@@ -895,8 +894,8 @@ func (conn *Conn) createWatch(session bool) (watchId uintptr, watchChannel chan 
 func (conn *Conn) forgetWatch(watchId uintptr) {
 	watchMutex.Lock()
 	defer watchMutex.Unlock()
-	conn.watchChannels[watchId] = nil, false
-	watchConns[watchId] = nil, false
+	delete(conn.watchChannels, watchId)
+	delete(watchConns, watchId)
 }
 
 // closeAllWatches closes all watch channels for conn.
@@ -905,8 +904,8 @@ func (conn *Conn) closeAllWatches() {
 	defer watchMutex.Unlock()
 	for watchId, ch := range conn.watchChannels {
 		close(ch)
-		conn.watchChannels[watchId] = nil, false
-		watchConns[watchId] = nil, false
+		delete(conn.watchChannels, watchId)
+		delete(watchConns, watchId)
 	}
 }
 
@@ -950,8 +949,8 @@ func sendEvent(watchId uintptr, event Event) {
 		}
 	}
 	if watchId != conn.sessionWatchId {
-		conn.watchChannels[watchId] = nil, false
-		watchConns[watchId] = nil, false
+		delete(conn.watchChannels, watchId)
+		delete(watchConns, watchId)
 		close(ch)
 	}
 }
