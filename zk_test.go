@@ -300,9 +300,8 @@ func (s *S) TestChildren(c *C) {
 	c.Assert(stat.NumChildren(), Equals, int32(1))
 
 	children, stat, err = conn.Children("/non-existent")
-	c.Assert(err, NotNil)
 	c.Assert(err, Equals, zk.ZNONODE)
-	c.Assert(len(children), Equals, 0)
+	c.Assert(children, IsNil)
 	c.Assert(stat, IsNil)
 }
 
