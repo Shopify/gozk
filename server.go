@@ -1,4 +1,4 @@
-package zk
+package zookeeper
 
 import (
 	"bufio"

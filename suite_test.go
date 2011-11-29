@@ -1,10 +1,10 @@
-package zk_test
+package zookeeper_test
 
 import (
 	"bufio"
 	"fmt"
 	. "launchpad.net/gocheck"
-	"launchpad.net/gozk/zk"
+	zk "launchpad.net/gozk/zookeeper"
 	"os"
 	"os/exec"
 	"testing"

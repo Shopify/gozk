@@ -1,8 +1,8 @@
-package zk_test
+package zookeeper_test
 
 import (
 	. "launchpad.net/gocheck"
-	"launchpad.net/gozk/zk"
+	zk "launchpad.net/gozk/zookeeper"
 	"time"
 )
 

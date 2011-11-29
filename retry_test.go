@@ -1,9 +1,9 @@
-package zk_test
+package zookeeper_test
 
 import (
 	"errors"
 	. "launchpad.net/gocheck"
-	"launchpad.net/gozk/zk"
+	zk "launchpad.net/gozk/zookeeper"
 )
 
 func (s *S) TestRetryChangeCreating(c *C) {

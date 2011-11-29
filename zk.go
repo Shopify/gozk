@@ -6,7 +6,7 @@
 //
 // Written by Gustavo Niemeyer <gustavo.niemeyer@canonical.com>
 //
-package zk
+package zookeeper
 
 /*
 #cgo CFLAGS: -I/usr/include/c-client-src -I/usr/include/zookeeper
