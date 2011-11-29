@@ -1,4 +1,4 @@
-package zk_test
+package zookeeper_test
 
 import (
 	. "launchpad.net/gocheck"
