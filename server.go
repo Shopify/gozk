@@ -3,10 +3,11 @@ package zk
 import (
 	"bufio"
 	"bytes"
-	"exec"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -24,13 +25,13 @@ const zookeeperEnviron = "/etc/zookeeper/conf/environment"
 // Server does not actually start the server. Instead it returns
 // a command line, suitable for passing to exec.Command,
 // for example.
-func Server(port int, dataDir, installedDir string) ([]string, os.Error) {
+func Server(port int, dataDir, installedDir string) ([]string, error) {
 	cp, err := classPath(installedDir)
 	if err != nil {
 		return nil, err
 	}
 	logDir := filepath.Join(dataDir, "log")
-	if err = os.Mkdir(logDir, 0777); err != nil && err.(*os.PathError).Error != os.EEXIST {
+	if err = os.Mkdir(logDir, 0777); err != nil && err.(*os.PathError).Err != os.EEXIST {
 		return nil, err
 	}
 	logConfigPath, err := writeLog4JConfig(dataDir)
@@ -65,13 +66,13 @@ log4j.appender.CONSOLE.layout=org.apache.log4j.PatternLayout
 log4j.appender.CONSOLE.layout.ConversionPattern=%d{ISO8601} - %-5p [%t:%C{1}@%L] - %m%n
 `
 
-func writeLog4JConfig(dir string) (path string, err os.Error) {
+func writeLog4JConfig(dir string) (path string, err error) {
 	path = filepath.Join(dir, "log4j.properties")
 	err = ioutil.WriteFile(path, []byte(log4jProperties), 0666)
 	return
 }
 
-func writeZooKeeperConfig(dir string, port int) (path string, err os.Error) {
+func writeZooKeeperConfig(dir string, port int) (path string, err error) {
 	path = filepath.Join(dir, "zoo.cfg")
 	err = ioutil.WriteFile(path, []byte(fmt.Sprintf(
 		"tickTime=2000\n"+
@@ -82,7 +83,7 @@ func writeZooKeeperConfig(dir string, port int) (path string, err os.Error) {
 	return
 }
 
-func classPath(dir string) ([]string, os.Error) {
+func classPath(dir string) ([]string, error) {
 	if dir == "" {
 		return systemClassPath()
 	}
@@ -111,7 +112,7 @@ func classPath(dir string) ([]string, os.Error) {
 	return classPath, nil
 }
 
-func systemClassPath() ([]string, os.Error) {
+func systemClassPath() ([]string, error) {
 	f, err := os.Open(zookeeperEnviron)
 	if f == nil {
 		return nil, err
@@ -155,10 +156,10 @@ func systemClassPath() ([]string, os.Error) {
 
 // checkDirectory returns an error if the given path
 // does not exist or is not a directory.
-func checkDirectory(path string) os.Error {
+func checkDirectory(path string) error {
 	if info, err := os.Stat(path); err != nil || !info.IsDirectory() {
 		if err == nil {
-			err = &os.PathError{Op: "stat", Path: path, Error: os.NewError("is not a directory")}
+			err = &os.PathError{Op: "stat", Path: path, Err: errors.New("is not a directory")}
 		}
 		return err
 	}

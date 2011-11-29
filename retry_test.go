@@ -1,16 +1,16 @@
 package zk_test
 
 import (
+	"errors"
 	. "launchpad.net/gocheck"
 	"launchpad.net/gozk/zk"
-	"os"
 )
 
 func (s *S) TestRetryChangeCreating(c *C) {
 	conn, _ := s.init(c)
 
 	err := conn.RetryChange("/test", zk.EPHEMERAL, zk.WorldACL(zk.PERM_ALL),
-		func(data string, stat *zk.Stat) (string, os.Error) {
+		func(data string, stat *zk.Stat) (string, error) {
 			c.Assert(data, Equals, "")
 			c.Assert(stat, IsNil)
 			return "new", nil
@@ -35,7 +35,7 @@ func (s *S) TestRetryChangeSetting(c *C) {
 	c.Assert(err, IsNil)
 
 	err = conn.RetryChange("/test", zk.EPHEMERAL, []zk.ACL{},
-		func(data string, stat *zk.Stat) (string, os.Error) {
+		func(data string, stat *zk.Stat) (string, error) {
 			c.Assert(data, Equals, "old")
 			c.Assert(stat, NotNil)
 			c.Assert(stat.Version(), Equals, int32(0))
@@ -62,7 +62,7 @@ func (s *S) TestRetryChangeUnchangedValueDoesNothing(c *C) {
 	c.Assert(err, IsNil)
 
 	err = conn.RetryChange("/test", zk.EPHEMERAL, []zk.ACL{},
-		func(data string, stat *zk.Stat) (string, os.Error) {
+		func(data string, stat *zk.Stat) (string, error) {
 			c.Assert(data, Equals, "old")
 			c.Assert(stat, NotNil)
 			c.Assert(stat.Version(), Equals, int32(0))
@@ -80,7 +80,7 @@ func (s *S) TestRetryChangeUnchangedValueDoesNothing(c *C) {
 func (s *S) TestRetryChangeConflictOnCreate(c *C) {
 	conn, _ := s.init(c)
 
-	changeFunc := func(data string, stat *zk.Stat) (string, os.Error) {
+	changeFunc := func(data string, stat *zk.Stat) (string, error) {
 		switch data {
 		case "":
 			c.Assert(stat, IsNil)
@@ -114,7 +114,7 @@ func (s *S) TestRetryChangeConflictOnSetDueToChange(c *C) {
 	_, err := conn.Create("/test", "old", zk.EPHEMERAL, zk.WorldACL(zk.PERM_ALL))
 	c.Assert(err, IsNil)
 
-	changeFunc := func(data string, stat *zk.Stat) (string, os.Error) {
+	changeFunc := func(data string, stat *zk.Stat) (string, error) {
 		switch data {
 		case "old":
 			c.Assert(stat, NotNil)
@@ -148,7 +148,7 @@ func (s *S) TestRetryChangeConflictOnSetDueToDelete(c *C) {
 	_, err := conn.Create("/test", "old", zk.EPHEMERAL, zk.WorldACL(zk.PERM_ALL))
 	c.Assert(err, IsNil)
 
-	changeFunc := func(data string, stat *zk.Stat) (string, os.Error) {
+	changeFunc := func(data string, stat *zk.Stat) (string, error) {
 		switch data {
 		case "old":
 			c.Assert(stat, NotNil)
@@ -184,11 +184,11 @@ func (s *S) TestRetryChangeErrorInCallback(c *C) {
 	conn, _ := s.init(c)
 
 	err := conn.RetryChange("/test", zk.EPHEMERAL, zk.WorldACL(zk.PERM_ALL),
-		func(data string, stat *zk.Stat) (string, os.Error) {
-			return "don't use this", os.NewError("BOOM!")
+		func(data string, stat *zk.Stat) (string, error) {
+			return "don't use this", errors.New("BOOM!")
 		})
 	c.Assert(err, NotNil)
-	c.Assert(err.String(), Equals, "BOOM!")
+	c.Assert(err.Error(), Equals, "BOOM!")
 
 	stat, err := conn.Exists("/test")
 	c.Assert(err, IsNil)
@@ -204,7 +204,7 @@ func (s *S) TestRetryChangeFailsReading(c *C) {
 
 	var called bool
 	err = conn.RetryChange("/test", zk.EPHEMERAL, zk.WorldACL(zk.PERM_ALL),
-		func(data string, stat *zk.Stat) (string, os.Error) {
+		func(data string, stat *zk.Stat) (string, error) {
 			called = true
 			return "", nil
 		})
@@ -228,7 +228,7 @@ func (s *S) TestRetryChangeFailsSetting(c *C) {
 
 	var called bool
 	err = conn.RetryChange("/test", zk.EPHEMERAL, zk.WorldACL(zk.PERM_ALL),
-		func(data string, stat *zk.Stat) (string, os.Error) {
+		func(data string, stat *zk.Stat) (string, error) {
 			called = true
 			return "", nil
 		})
@@ -251,7 +251,7 @@ func (s *S) TestRetryChangeFailsCreating(c *C) {
 
 	var called bool
 	err = conn.RetryChange("/test/sub", zk.EPHEMERAL, zk.WorldACL(zk.PERM_ALL),
-		func(data string, stat *zk.Stat) (string, os.Error) {
+		func(data string, stat *zk.Stat) (string, error) {
 			called = true
 			return "", nil
 		})
