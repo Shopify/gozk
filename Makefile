@@ -6,6 +6,7 @@ TARG=launchpad.net/gozk/zookeeper
 
 GOFILES=\
 	server.go\
+	runserver.go\
 	
 CGOFILES=\
 	zk.go\

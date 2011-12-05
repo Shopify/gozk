@@ -6,56 +6,103 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 )
 
-const zookeeperEnviron = "/etc/zookeeper/conf/environment"
+// Server represents a ZooKeeper server, its data and configuration files.
+type Server struct {
+	runDir string
+	zkDir  string
+}
 
-// Server sets up a ZooKepeer server environment inside dataDir
-// for a server that listens on the specified TCP port, sending
-// all log messages to standard output.
-// The dataDir directory must exist already.
+// CreateServer creates the directory runDir and sets up a ZooKeeper server
+// environment inside it. It is an error if runDir already exists.
+// The server will listen on the specified TCP port.
 // 
-// The ZooKepeer installation directory is specified by installedDir.
+// The ZooKeeper installation directory is specified by zkDir.
 // If this is empty, a system default will be used.
 //
-// Server does not actually start the server. Instead it returns
-// a command line, suitable for passing to exec.Command,
-// for example.
-func Server(port int, dataDir, installedDir string) ([]string, error) {
-	cp, err := classPath(installedDir)
+// CreateServer does not start the server.
+func CreateServer(port int, runDir, zkDir string) (*Server, error) {
+	if err := os.Mkdir(runDir, 0777); err != nil {
+		return nil, err
+	}
+	srv := &Server{runDir: runDir, zkDir: zkDir}
+	if err := srv.writeLog4JConfig(); err != nil {
+		return nil, err
+	}
+	if err := srv.writeZooKeeperConfig(port); err != nil {
+		return nil, err
+	}
+	if err := srv.writeZkDir(); err != nil {
+		return nil, err
+	}
+	return srv, nil
+}
+
+// AttachServer creates a new ZooKeeper Server instance
+// to operate inside an existing run directory, runDir.
+// The directory must have been created with CreateServer.
+func AttachServer(runDir string) (*Server, error) {
+	srv := &Server{runDir: runDir}
+	if err := srv.readZkDir(); err != nil {
+		return nil, fmt.Errorf("cannot read server install directory: %v", err)
+	}
+	return srv, nil
+}
+
+func (srv *Server) checkAvailability() error {
+	port, err := srv.networkPort()
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("cannot get network port: %v", err)
 	}
-	logDir := filepath.Join(dataDir, "log")
-	if err = os.Mkdir(logDir, 0777); err != nil && err.(*os.PathError).Err != os.EEXIST {
-		return nil, err
-	}
-	logConfigPath, err := writeLog4JConfig(dataDir)
+	l, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", port))
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("cannot listen on port %v: %v", port, err)
 	}
-	configPath, err := writeZooKeeperConfig(dataDir, port)
+	l.Close()
+	return nil
+}
+
+// networkPort returns the TCP port number that
+// the server is configured for.
+func (srv *Server) networkPort() (int, error) {
+	f, err := os.Open(srv.path("zoo.cfg"))
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
-	exe, err := exec.LookPath("java")
+	r := bufio.NewReader(f)
+	for {
+		line, err := r.ReadSlice('\n')
+		if err != nil {
+			return 0, fmt.Errorf("cannot get port from %q", srv.path("zoo.cfg"))
+		}
+		var port int
+		if n, _ := fmt.Sscanf(string(line), "clientPort=%d\n", &port); n == 1 {
+			return port, nil
+		}
+	}
+	panic("not reached")
+}
+
+// command returns the command used to start the
+// ZooKeeper server.
+func (srv *Server) command() ([]string, error) {
+	cp, err := srv.classPath()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("cannot get class path: %v", err)
 	}
-	cmd := []string{
-		exe,
+	return []string{
+		"java",
 		"-cp", strings.Join(cp, ":"),
-		"-Dzookeeper.log.dir=" + logDir,
 		"-Dzookeeper.root.logger=INFO,CONSOLE",
-		"-Dlog4j.configuration=file:" + logConfigPath,
+		"-Dlog4j.configuration=file:" + srv.path("log4j.properties"),
 		"org.apache.zookeeper.server.quorum.QuorumPeerMain",
-		configPath,
-	}
-	return cmd, nil
+		srv.path("zoo.cfg"),
+	}, nil
 }
 
 var log4jProperties = `
@@ -66,24 +113,34 @@ log4j.appender.CONSOLE.layout=org.apache.log4j.PatternLayout
 log4j.appender.CONSOLE.layout.ConversionPattern=%d{ISO8601} - %-5p [%t:%C{1}@%L] - %m%n
 `
 
-func writeLog4JConfig(dir string) (path string, err error) {
-	path = filepath.Join(dir, "log4j.properties")
-	err = ioutil.WriteFile(path, []byte(log4jProperties), 0666)
-	return
+func (srv *Server) writeLog4JConfig() (err error) {
+	return ioutil.WriteFile(srv.path("log4j.properties"), []byte(log4jProperties), 0666)
 }
 
-func writeZooKeeperConfig(dir string, port int) (path string, err error) {
-	path = filepath.Join(dir, "zoo.cfg")
-	err = ioutil.WriteFile(path, []byte(fmt.Sprintf(
+func (srv *Server) writeZooKeeperConfig(port int) (err error) {
+	return ioutil.WriteFile(srv.path("zoo.cfg"), []byte(fmt.Sprintf(
 		"tickTime=2000\n"+
 			"dataDir=%s\n"+
 			"clientPort=%d\n"+
 			"maxClientCnxns=500\n",
-		dir, port)), 0666)
-	return
+		srv.runDir, port)), 0666)
 }
 
-func classPath(dir string) ([]string, error) {
+func (srv *Server) writeZkDir() error {
+	return ioutil.WriteFile(srv.path("zkdir.txt"), []byte(srv.zkDir), 0666)
+}
+
+func (srv *Server) readZkDir() error {
+	data, err := ioutil.ReadFile(srv.path("zkdir.txt"))
+	if err != nil {
+		return err
+	}
+	srv.zkDir = string(data)
+	return nil
+}
+
+func (srv *Server) classPath() ([]string, error) {
+	dir := srv.zkDir
 	if dir == "" {
 		return systemClassPath()
 	}
@@ -111,6 +168,8 @@ func classPath(dir string) ([]string, error) {
 	}
 	return classPath, nil
 }
+
+const zookeeperEnviron = "/etc/zookeeper/conf/environment"
 
 func systemClassPath() ([]string, error) {
 	f, err := os.Open(zookeeperEnviron)
@@ -157,11 +216,15 @@ func systemClassPath() ([]string, error) {
 // checkDirectory returns an error if the given path
 // does not exist or is not a directory.
 func checkDirectory(path string) error {
-	if info, err := os.Stat(path); err != nil || !info.IsDirectory() {
-		if err == nil {
-			err = &os.PathError{Op: "stat", Path: path, Err: errors.New("is not a directory")}
+	if info, err := os.Stat(path); err != nil || !info.IsDir() {
+		if err != nil {
+			return err
 		}
-		return err
+		return &os.PathError{Op: "stat", Path: path, Err: errors.New("is not a directory")}
 	}
 	return nil
+}
+
+func (srv *Server) path(name string) string {
+	return filepath.Join(srv.runDir, name)
 }

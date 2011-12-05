@@ -1,12 +1,10 @@
 package zookeeper_test
 
 import (
-	"bufio"
 	"fmt"
 	. "launchpad.net/gocheck"
 	zk "launchpad.net/gozk/zookeeper"
 	"os"
-	"os/exec"
 	"testing"
 	"time"
 )
@@ -18,7 +16,7 @@ func TestAll(t *testing.T) {
 var _ = Suite(&S{})
 
 type S struct {
-	zkArgs     []string
+	zkServer   *zk.Server
 	zkTestRoot string
 	zkTestPort int
 	zkProcess  *os.Process // The running ZooKeeper process
@@ -104,53 +102,25 @@ func (s *S) SetUpSuite(c *C) {
 	var err error
 	s.deadWatches = make(chan bool)
 
-	s.zkTestRoot = c.MkDir()
-	s.zkTestPort = 21812
-	s.zkAddr = fmt.Sprint("localhost:", s.zkTestPort)
+	// N.B. We meed to create a subdirectory because zk.CreateServer
+	// insists on creating its own directory.
 
-	s.zkArgs, err = zk.Server(s.zkTestPort, s.zkTestRoot, "")
+	s.zkTestRoot = c.MkDir() + "/zk"
+	port := 21812
+	s.zkAddr = fmt.Sprint("localhost:", port)
+
+	s.zkServer, err = zk.CreateServer(port, s.zkTestRoot, "")
 	if err != nil {
 		c.Fatal("Cannot set up server environment: ", err)
 	}
-	s.StartZK(c)
+	err = s.zkServer.Start()
+	if err != nil {
+		c.Fatal("Cannot start ZooKeeper server: ", err)
+	}
 }
 
 func (s *S) TearDownSuite(c *C) {
-	s.StopZK()
-}
-
-func startLogger(c *C, cmd *exec.Cmd) {
-	r, err := cmd.StdoutPipe()
-	if err != nil {
-		c.Fatal("cannot make output pipe:", err)
+	if s.zkServer != nil {
+		s.zkServer.Destroy()
 	}
-	cmd.Stderr = cmd.Stdout
-	bio := bufio.NewReader(r)
-	go func() {
-		for {
-			line, err := bio.ReadSlice('\n')
-			if err != nil {
-				break
-			}
-			c.Log(line[0 : len(line)-1])
-		}
-	}()
-}
-
-func (s *S) StartZK(c *C) {
-	cmd := exec.Command(s.zkArgs[0], s.zkArgs[1:]...)
-	startLogger(c, cmd)
-	err := cmd.Start()
-	if err != nil {
-		c.Fatal("Error starting zookeeper server: ", err)
-	}
-	s.zkProcess = cmd.Process
-}
-
-func (s *S) StopZK() {
-	if s.zkProcess != nil {
-		s.zkProcess.Kill()
-		s.zkProcess.Wait(0)
-	}
-	s.zkProcess = nil
 }
