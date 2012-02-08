@@ -36,7 +36,7 @@ func (s *S) init(c *C) (*zk.Conn, chan zk.Event) {
 
 	bufferedWatch := make(chan zk.Event, 256)
 	bufferedWatch <- zk.Event{
-		Type: zk.EVENT_SESSION,
+		Type:  zk.EVENT_SESSION,
 		State: zk.STATE_CONNECTED,
 	}
 
