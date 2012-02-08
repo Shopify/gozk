@@ -31,18 +31,14 @@ type S struct {
 var logLevel = 0 //zk.LOG_ERROR
 
 func (s *S) init(c *C) (*zk.Conn, chan zk.Event) {
-	conn, watch, err := zk.Dial(s.zkAddr, 5e9)
-	c.Assert(err, IsNil)
-
+	conn, watch := dialWithTimeout(c, s.zkAddr, 5e9)
 	s.handles = append(s.handles, conn)
 
-	event := <-watch
-
-	c.Assert(event.Type, Equals, zk.EVENT_SESSION)
-	c.Assert(event.State, Equals, zk.STATE_CONNECTED)
-
 	bufferedWatch := make(chan zk.Event, 256)
-	bufferedWatch <- event
+	bufferedWatch <- zk.Event{
+		Type: zk.EVENT_SESSION,
+		State: zk.STATE_CONNECTED,
+	}
 
 	s.liveWatches += 1
 	go func() {

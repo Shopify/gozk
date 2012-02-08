@@ -20,6 +20,7 @@ import "C"
 import (
 	"fmt"
 	"sync"
+	"time"
 	"unsafe"
 )
 
@@ -228,6 +229,7 @@ func init() {
 
 		panic("OOPS: Constants don't match C counterparts")
 	}
+	SetLogLevel(0)
 }
 
 // AuthACL produces an ACL list containing a single ACL which uses
@@ -371,17 +373,17 @@ func SetLogLevel(level int) {
 // The watch channel receives events of type SESSION_EVENT when any change
 // to the state of the established connection happens.  See the documentation
 // for the Event type for more details.
-func Dial(servers string, recvTimeoutNS int64) (*Conn, <-chan Event, error) {
-	return dial(servers, recvTimeoutNS, nil)
+func Dial(servers string, recvTimeout time.Duration) (*Conn, <-chan Event, error) {
+	return dial(servers, recvTimeout, nil)
 }
 
 // Redial is equivalent to Dial, but attempts to reestablish an existing session
 // identified via the clientId parameter.
-func Redial(servers string, recvTimeoutNS int64, clientId *ClientId) (*Conn, <-chan Event, error) {
-	return dial(servers, recvTimeoutNS, clientId)
+func Redial(servers string, recvTimeout time.Duration, clientId *ClientId) (*Conn, <-chan Event, error) {
+	return dial(servers, recvTimeout, clientId)
 }
 
-func dial(servers string, recvTimeoutNS int64, clientId *ClientId) (*Conn, <-chan Event, error) {
+func dial(servers string, recvTimeout time.Duration, clientId *ClientId) (*Conn, <-chan Event, error) {
 	conn := &Conn{}
 	conn.watchChannels = make(map[uintptr]chan Event)
 
@@ -394,7 +396,7 @@ func dial(servers string, recvTimeoutNS int64, clientId *ClientId) (*Conn, <-cha
 	conn.sessionWatchId = watchId
 
 	cservers := C.CString(servers)
-	handle, cerr := C.zookeeper_init(cservers, C.watch_handler, C.int(recvTimeoutNS/1e6), cId, unsafe.Pointer(watchId), 0)
+	handle, cerr := C.zookeeper_init(cservers, C.watch_handler, C.int(recvTimeout/1e6), cId, unsafe.Pointer(watchId), 0)
 	C.free(unsafe.Pointer(cservers))
 	if handle == nil {
 		conn.closeAllWatches()
