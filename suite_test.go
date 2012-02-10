@@ -30,22 +30,6 @@ type S struct {
 
 var logLevel = 0 //zk.LOG_ERROR
 
-func dialWithTimeout(c *C, addr string, timeout time.Duration) (*zk.Conn, <-chan zk.Event) {
-	conn, watch, err := zk.Dial(addr, timeout)
-	c.Assert(err, IsNil)
-
-	select {
-	case e, ok := <-watch:
-		c.Assert(ok, Equals, true)
-		c.Assert(e.Type, Equals, zk.EVENT_SESSION)
-		c.Assert(e.State, Equals, zk.STATE_CONNECTED)
-	case <-time.After(timeout):
-		conn.Close()
-		c.Fatalf("timeout dialling zookeeper addr %v", addr)
-	}
-	return conn, watch
-}
-
 func (s *S) init(c *C) (*zk.Conn, chan zk.Event) {
 	conn, watch, err := zk.Dial(s.zkAddr, 5e9)
 	c.Assert(err, IsNil)
