@@ -30,14 +30,36 @@ type S struct {
 
 var logLevel = 0 //zk.LOG_ERROR
 
-func (s *S) init(c *C) (*zk.Conn, chan zk.Event) {
-	conn, watch := dialWithTimeout(c, s.zkAddr, 5e9)
-	s.handles = append(s.handles, conn)
+func dialWithTimeout(c *C, addr string, timeout time.Duration) (*zk.Conn, <-chan zk.Event) {
+	conn, watch, err := zk.Dial(addr, timeout)
+	c.Assert(err, IsNil)
 
+	select {
+	case e, ok := <-watch:
+		c.Assert(ok, Equals, true)
+		c.Assert(e.Type, Equals, zk.EVENT_SESSION)
+		c.Assert(e.State, Equals, zk.STATE_CONNECTED)
+	case <-time.After(timeout):
+		conn.Close()
+		c.Fatalf("timeout dialling zookeeper addr %v", addr)
+	}
+	return conn, watch
+}
+
+func (s *S) init(c *C) (*zk.Conn, chan zk.Event) {
+	conn, watch, err := zk.Dial(s.zkAddr, 5e9)
+	c.Assert(err, IsNil)
+	s.handles = append(s.handles, conn)
 	bufferedWatch := make(chan zk.Event, 256)
-	bufferedWatch <- zk.Event{
-		Type:  zk.EVENT_SESSION,
-		State: zk.STATE_CONNECTED,
+
+	select {
+	case e, ok := <-watch:
+		c.Assert(ok, Equals, true)
+		c.Assert(e.Type, Equals, zk.EVENT_SESSION)
+		c.Assert(e.State, Equals, zk.STATE_CONNECTED)
+		bufferedWatch <- e
+	case <-time.After(5e9):
+		c.Fatalf("timeout dialling zookeeper addr %v", s.zkAddr)
 	}
 
 	s.liveWatches += 1

@@ -115,24 +115,8 @@ func startServer(runDir string, abort bool) error {
 	return nil
 }
 
-func dialWithTimeout(c *C, addr string, timeout time.Duration) (*zk.Conn, <-chan zk.Event) {
-	conn, watch, err := zk.Dial(addr, timeout)
-	c.Assert(err, IsNil)
-
-	select {
-	case e, ok := <-watch:
-		c.Assert(ok, Equals, true)
-		c.Assert(e.Type, Equals, zk.EVENT_SESSION)
-		c.Assert(e.State, Equals, zk.STATE_CONNECTED)
-	case <-time.After(timeout):
-		conn.Close()
-		c.Fatalf("timeout dialling zookeeper addr %v", addr)
-	}
-	return conn, watch
-}
-
 func (s *S) checkCookie(c *C) {
-	conn, _ := dialWithTimeout(c, s.zkAddr, 5e9)
+	conn, _ := s.init(c)
 	cookie, _, err := conn.Get("/testAttachCookie")
 	c.Assert(err, IsNil)
 	c.Assert(cookie, Equals, "testAttachCookie")
