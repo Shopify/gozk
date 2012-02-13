@@ -33,16 +33,18 @@ var logLevel = 0 //zk.LOG_ERROR
 func (s *S) init(c *C) (*zk.Conn, chan zk.Event) {
 	conn, watch, err := zk.Dial(s.zkAddr, 5e9)
 	c.Assert(err, IsNil)
-
 	s.handles = append(s.handles, conn)
-
-	event := <-watch
-
-	c.Assert(event.Type, Equals, zk.EVENT_SESSION)
-	c.Assert(event.State, Equals, zk.STATE_CONNECTED)
-
 	bufferedWatch := make(chan zk.Event, 256)
-	bufferedWatch <- event
+
+	select {
+	case e, ok := <-watch:
+		c.Assert(ok, Equals, true)
+		c.Assert(e.Type, Equals, zk.EVENT_SESSION)
+		c.Assert(e.State, Equals, zk.STATE_CONNECTED)
+		bufferedWatch <- e
+	case <-time.After(5e9):
+		c.Fatalf("timeout dialling zookeeper addr %v", s.zkAddr)
+	}
 
 	s.liveWatches += 1
 	go func() {

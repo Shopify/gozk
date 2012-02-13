@@ -28,10 +28,10 @@ func TestStartNonChildServer(t *testing.T) {
 	}
 	err := startServer(*reattachRunDir, *reattachAbnormalStop)
 	if err != nil {
-		fmt.Printf("error:%v\n", err)
+		fmt.Printf("zktest:error:%v\n", err)
 		return
 	}
-	fmt.Printf("done\n")
+	fmt.Printf("zktest:done\n")
 }
 
 func (s *S) startServer(c *C, abort bool) {
@@ -50,28 +50,40 @@ func (s *S) startServerIndirect(c *C, abort bool) {
 		os.Args[0],
 		"-zktest.reattach",
 		"-zktest.rundir", s.zkTestRoot,
-		"-zktest.stop=", fmt.Sprint(abort),
+		"-zktest.stop="+fmt.Sprint(abort),
 		"-test.run", "StartNonChildServer",
 	)
 	r, err := cmd.StdoutPipe()
 	c.Assert(err, IsNil)
 	defer r.Close()
+	cmd.Stderr = cmd.Stdout
 	if err := cmd.Start(); err != nil {
 		c.Fatalf("cannot start re-entrant gotest process: %v", err)
 	}
 	defer cmd.Wait()
 	bio := bufio.NewReader(r)
+	done := false
 	for {
 		line, err := bio.ReadSlice('\n')
 		if err != nil {
-			c.Fatalf("indirect server status line not found: %v", err)
+			if !done {
+				c.Fatalf("indirect server status line not found: %v", err)
+			}
+			return
+		}
+		if line[len(line)-1] == '\n' {
+			line = line[0 : len(line)-1]
 		}
 		s := string(line)
-		if strings.HasPrefix(s, "error:") {
+		switch {
+		case strings.HasPrefix(s, "zktest:error:"):
 			c.Fatalf("indirect server error: %s", s[len("error:"):])
-		}
-		if s == "done\n" {
-			return
+		case s == "zktest:done":
+			done = true
+		default:
+			// Log output that doesn't match what we're expecting - it
+			// can be informative.
+			c.Logf("subcommand: %s", s)
 		}
 	}
 	panic("not reached")
@@ -104,14 +116,7 @@ func startServer(runDir string, abort bool) error {
 }
 
 func (s *S) checkCookie(c *C) {
-	conn, watch, err := zk.Dial(s.zkAddr, 5e9)
-	c.Assert(err, IsNil)
-
-	e, ok := <-watch
-	c.Assert(ok, Equals, true)
-	c.Assert(e.Ok(), Equals, true)
-
-	c.Assert(err, IsNil)
+	conn, _ := s.init(c)
 	cookie, _, err := conn.Get("/testAttachCookie")
 	c.Assert(err, IsNil)
 	c.Assert(cookie, Equals, "testAttachCookie")
