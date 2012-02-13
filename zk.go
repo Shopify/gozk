@@ -92,20 +92,20 @@ type ACL struct {
 // event.Type is set to EVENT_CLOSED and event.State is set to STATE_CLOSED,
 // to facilitate handling.
 type Event struct {
-     // Type gives the type of event (one of the EVENT_* constants).
-       // If Type is EVENT_SESSION, then the event is a session
-       // event.
-       Type int
+	// Type gives the type of event (one of the EVENT_* constants).
+	// If Type is EVENT_SESSION, then the event is a session
+	// event.
+	Type int
 
-       // For non-session events, Path gives the path of the node
-       // that was being watched.
-       Path string
+	// For non-session events, Path gives the path of the node
+	// that was being watched.
+	Path string
 
-       // For session events, State (one of the STATE* constants) gives the session
-       // status.
-       State int
+	// For session events, State (one of the STATE* constants) gives the session
+	// status.
+	State int
 }
- 
+
 // Error represents a ZooKeeper error.
 type Error int
 
@@ -324,7 +324,7 @@ func (stat *Stat) Mzxid() int64 {
 }
 
 func millisec2time(ms int64) time.Time {
-	return time.Unix(ms / 1e3, ms % 1e3 * 1e6)
+	return time.Unix(ms/1e3, ms%1e3*1e6)
 }
 
 // CTime returns the time (at millisecond resolution)  when the node was
