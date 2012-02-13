@@ -140,8 +140,8 @@ func (s *S) TestGetAndStat(c *C) {
 	c.Assert(data, Equals, "")
 	c.Assert(stat.Czxid(), Equals, int64(0))
 	c.Assert(stat.Mzxid(), Equals, int64(0))
-	c.Assert(stat.CTime(), Equals, int64(0))
-	c.Assert(stat.MTime(), Equals, int64(0))
+	c.Assert(stat.CTime(), Equals, time.Unix(0, 0))
+	c.Assert(stat.MTime(), Equals, time.Unix(0, 0))
 	c.Assert(stat.Version(), Equals, int32(0))
 	c.Assert(stat.CVersion(), Equals, int32(0))
 	c.Assert(stat.AVersion(), Equals, int32(0))
@@ -178,15 +178,33 @@ func (s *S) TestCreateAndGet(c *C) {
 	c.Assert(data, Equals, "bababum")
 }
 
+func checkTimeBetween(c *C, what string, t, t0, t1 time.Time) {
+	// Truncate the start time to millisecond resolution, as
+	// time stamps get similarly truncated.
+	t0 = t0.Add(-time.Duration(t0.Nanosecond() % 1e6))
+	maxdt := t1.Sub(t0)
+	dt := t.Sub(t0)
+	if dt < 0 || dt > maxdt {
+		c.Errorf("%s out of range; expected between %v and %v, got %v", what, t0.Format(time.StampNano), t1.Format(time.StampNano), t.Format(time.StampNano))
+	}
+}
+
 func (s *S) TestCreateSetAndGet(c *C) {
 	conn, _ := s.init(c)
 
+	start := time.Now()
 	_, err := conn.Create("/test", "", zk.EPHEMERAL, zk.WorldACL(zk.PERM_ALL))
 	c.Assert(err, IsNil)
 
-	stat, err := conn.Set("/test", "bababum", -1) // Any version.
+	_, stat, err := conn.Get("/test")
+	c.Assert(err, IsNil)
+	checkTimeBetween(c, "ctime", stat.CTime(), start, time.Now())
+
+	start = time.Now()
+	stat, err = conn.Set("/test", "bababum", -1) // Any version.
 	c.Assert(err, IsNil)
 	c.Assert(stat.Version(), Equals, int32(1))
+	checkTimeBetween(c, "mtime", stat.MTime(), start, time.Now())
 
 	data, _, err := conn.Get("/test")
 	c.Assert(err, IsNil)

@@ -92,11 +92,20 @@ type ACL struct {
 // event.Type is set to EVENT_CLOSED and event.State is set to STATE_CLOSED,
 // to facilitate handling.
 type Event struct {
-	Type  int
-	Path  string
-	State int
-}
+     // Type gives the type of event (one of the EVENT_* constants).
+       // If Type is EVENT_SESSION, then the event is a session
+       // event.
+       Type int
 
+       // For non-session events, Path gives the path of the node
+       // that was being watched.
+       Path string
+
+       // For session events, State (one of the STATE* constants) gives the session
+       // status.
+       State int
+}
+ 
 // Error represents a ZooKeeper error.
 type Error int
 
@@ -304,46 +313,64 @@ type Stat struct {
 	c C.struct_Stat
 }
 
+// Czxid returns the zxid of the change that caused the node to be created.
 func (stat *Stat) Czxid() int64 {
 	return int64(stat.c.czxid)
 }
 
+// Mzxid returns the zxid of the change that last modified the node.
 func (stat *Stat) Mzxid() int64 {
 	return int64(stat.c.mzxid)
 }
 
-func (stat *Stat) CTime() int64 {
-	return int64(stat.c.ctime)
+func millisec2time(ms int64) time.Time {
+	return time.Unix(ms / 1e3, ms % 1e3 * 1e6)
 }
 
-func (stat *Stat) MTime() int64 {
-	return int64(stat.c.mtime)
+// CTime returns the time (at millisecond resolution)  when the node was
+// created.
+func (stat *Stat) CTime() time.Time {
+	return millisec2time(int64(stat.c.ctime))
 }
 
+// MTime returns the time (at millisecond resolution) when the node was
+// last modified.
+func (stat *Stat) MTime() time.Time {
+	return millisec2time(int64(stat.c.mtime))
+}
+
+// Version returns the number of changes to the data of the node.
 func (stat *Stat) Version() int32 {
 	return int32(stat.c.version)
 }
 
+// CVersion returns the number of changes to the children of the node.
 func (stat *Stat) CVersion() int32 {
 	return int32(stat.c.cversion)
 }
 
+// AVersion returns the number of changes to the ACL of the node.
 func (stat *Stat) AVersion() int32 {
 	return int32(stat.c.aversion)
 }
 
+// If the node is an ephemeral node, EphemeralOwner returns the session id
+// of the owner of the node; otherwise it will return zero.
 func (stat *Stat) EphemeralOwner() int64 {
 	return int64(stat.c.ephemeralOwner)
 }
 
+// DataLength returns the length of the data in the node in bytes.
 func (stat *Stat) DataLength() int32 {
 	return int32(stat.c.dataLength)
 }
 
+// NumChildren returns the number of children of the znode.
 func (stat *Stat) NumChildren() int32 {
 	return int32(stat.c.numChildren)
 }
 
+// Pzxid returns the Pzxid of the node, whatever that is.
 func (stat *Stat) Pzxid() int64 {
 	return int64(stat.c.pzxid)
 }
