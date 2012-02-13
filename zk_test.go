@@ -182,9 +182,7 @@ func checkTimeBetween(c *C, what string, t, t0, t1 time.Time) {
 	// Truncate the start time to millisecond resolution, as
 	// time stamps get similarly truncated.
 	t0 = t0.Add(-time.Duration(t0.Nanosecond() % 1e6))
-	maxdt := t1.Sub(t0)
-	dt := t.Sub(t0)
-	if dt < 0 || dt > maxdt {
+	if t.Before(t0) || t.After(t1) {
 		c.Errorf("%s out of range; expected between %v and %v, got %v", what, t0.Format(time.StampNano), t1.Format(time.StampNano), t.Format(time.StampNano))
 	}
 }

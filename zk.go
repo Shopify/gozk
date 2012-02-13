@@ -92,18 +92,9 @@ type ACL struct {
 // event.Type is set to EVENT_CLOSED and event.State is set to STATE_CLOSED,
 // to facilitate handling.
 type Event struct {
-	// Type gives the type of event (one of the EVENT_* constants).
-	// If Type is EVENT_SESSION, then the event is a session
-	// event.
-	Type int
-
-	// For non-session events, Path gives the path of the node
-	// that was being watched.
-	Path string
-
-	// For session events, State (one of the STATE* constants) gives the session
-	// status.
-	State int
+	Type  int    // One of the EVENT_* constants.
+	Path  string // For non-session events, the path of the watched node.
+	State int    // One of the STATE_* constants.
 }
 
 // Error represents a ZooKeeper error.
@@ -345,6 +336,7 @@ func (stat *Stat) Version() int32 {
 }
 
 // CVersion returns the number of changes to the children of the node.
+// This only changes when children are created or removed.
 func (stat *Stat) CVersion() int32 {
 	return int32(stat.c.cversion)
 }
@@ -365,7 +357,7 @@ func (stat *Stat) DataLength() int32 {
 	return int32(stat.c.dataLength)
 }
 
-// NumChildren returns the number of children of the znode.
+// NumChildren returns the number of children of the node.
 func (stat *Stat) NumChildren() int32 {
 	return int32(stat.c.numChildren)
 }
