@@ -20,7 +20,7 @@ func (s *S) TestRetryChangeCreating(c *C) {
 	data, stat, err := conn.Get("/test")
 	c.Assert(err, IsNil)
 	c.Assert(stat, NotNil)
-	c.Assert(stat.Version(), Equals, int32(0))
+	c.Assert(stat.Version(), Equals, 0)
 	c.Assert(data, Equals, "new")
 
 	acl, _, err := conn.ACL("/test")
@@ -38,7 +38,7 @@ func (s *S) TestRetryChangeSetting(c *C) {
 		func(data string, stat *zk.Stat) (string, error) {
 			c.Assert(data, Equals, "old")
 			c.Assert(stat, NotNil)
-			c.Assert(stat.Version(), Equals, int32(0))
+			c.Assert(stat.Version(), Equals, 0)
 			return "brand new", nil
 		})
 	c.Assert(err, IsNil)
@@ -46,7 +46,7 @@ func (s *S) TestRetryChangeSetting(c *C) {
 	data, stat, err := conn.Get("/test")
 	c.Assert(err, IsNil)
 	c.Assert(stat, NotNil)
-	c.Assert(stat.Version(), Equals, int32(1))
+	c.Assert(stat.Version(), Equals, 1)
 	c.Assert(data, Equals, "brand new")
 
 	// ACL was unchanged by RetryChange().
@@ -65,7 +65,7 @@ func (s *S) TestRetryChangeUnchangedValueDoesNothing(c *C) {
 		func(data string, stat *zk.Stat) (string, error) {
 			c.Assert(data, Equals, "old")
 			c.Assert(stat, NotNil)
-			c.Assert(stat.Version(), Equals, int32(0))
+			c.Assert(stat.Version(), Equals, 0)
 			return "old", nil
 		})
 	c.Assert(err, IsNil)
@@ -73,7 +73,7 @@ func (s *S) TestRetryChangeUnchangedValueDoesNothing(c *C) {
 	data, stat, err := conn.Get("/test")
 	c.Assert(err, IsNil)
 	c.Assert(stat, NotNil)
-	c.Assert(stat.Version(), Equals, int32(0)) // Unchanged!
+	c.Assert(stat.Version(), Equals, 0) // Unchanged!
 	c.Assert(data, Equals, "old")
 }
 
@@ -90,7 +90,7 @@ func (s *S) TestRetryChangeConflictOnCreate(c *C) {
 			return "<none> => conflict", nil
 		case "conflict":
 			c.Assert(stat, NotNil)
-			c.Assert(stat.Version(), Equals, int32(0))
+			c.Assert(stat.Version(), Equals, 0)
 			return "conflict => new", nil
 		default:
 			c.Fatal("Unexpected node data: " + data)
@@ -105,7 +105,7 @@ func (s *S) TestRetryChangeConflictOnCreate(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(data, Equals, "conflict => new")
 	c.Assert(stat, NotNil)
-	c.Assert(stat.Version(), Equals, int32(1))
+	c.Assert(stat.Version(), Equals, 1)
 }
 
 func (s *S) TestRetryChangeConflictOnSetDueToChange(c *C) {
@@ -118,13 +118,13 @@ func (s *S) TestRetryChangeConflictOnSetDueToChange(c *C) {
 		switch data {
 		case "old":
 			c.Assert(stat, NotNil)
-			c.Assert(stat.Version(), Equals, int32(0))
+			c.Assert(stat.Version(), Equals, 0)
 			_, err := conn.Set("/test", "conflict", 0)
 			c.Assert(err, IsNil)
 			return "old => new", nil
 		case "conflict":
 			c.Assert(stat, NotNil)
-			c.Assert(stat.Version(), Equals, int32(1))
+			c.Assert(stat.Version(), Equals, 1)
 			return "conflict => new", nil
 		default:
 			c.Fatal("Unexpected node data: " + data)
@@ -139,7 +139,7 @@ func (s *S) TestRetryChangeConflictOnSetDueToChange(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(data, Equals, "conflict => new")
 	c.Assert(stat, NotNil)
-	c.Assert(stat.Version(), Equals, int32(2))
+	c.Assert(stat.Version(), Equals, 2)
 }
 
 func (s *S) TestRetryChangeConflictOnSetDueToDelete(c *C) {
@@ -152,7 +152,7 @@ func (s *S) TestRetryChangeConflictOnSetDueToDelete(c *C) {
 		switch data {
 		case "old":
 			c.Assert(stat, NotNil)
-			c.Assert(stat.Version(), Equals, int32(0))
+			c.Assert(stat.Version(), Equals, 0)
 			err := conn.Delete("/test", 0)
 			c.Assert(err, IsNil)
 			return "old => <deleted>", nil
@@ -172,7 +172,7 @@ func (s *S) TestRetryChangeConflictOnSetDueToDelete(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(data, Equals, "<deleted> => new")
 	c.Assert(stat, NotNil)
-	c.Assert(stat.Version(), Equals, int32(0))
+	c.Assert(stat.Version(), Equals, 0)
 
 	// Should be the new ACL.
 	acl, _, err := conn.ACL("/test")
@@ -214,7 +214,7 @@ func (s *S) TestRetryChangeFailsReading(c *C) {
 	stat, err := conn.Exists("/test")
 	c.Assert(err, IsNil)
 	c.Assert(stat, NotNil)
-	c.Assert(stat.Version(), Equals, int32(0))
+	c.Assert(stat.Version(), Equals, 0)
 
 	c.Assert(called, Equals, false)
 }
@@ -237,7 +237,7 @@ func (s *S) TestRetryChangeFailsSetting(c *C) {
 	stat, err := conn.Exists("/test")
 	c.Assert(err, IsNil)
 	c.Assert(stat, NotNil)
-	c.Assert(stat.Version(), Equals, int32(0))
+	c.Assert(stat.Version(), Equals, 0)
 
 	c.Assert(called, Equals, true)
 }
