@@ -331,19 +331,19 @@ func (stat *Stat) MTime() time.Time {
 }
 
 // Version returns the number of changes to the data of the node.
-func (stat *Stat) Version() int32 {
-	return int32(stat.c.version)
+func (stat *Stat) Version() int {
+	return int(stat.c.version)
 }
 
 // CVersion returns the number of changes to the children of the node.
 // This only changes when children are created or removed.
-func (stat *Stat) CVersion() int32 {
-	return int32(stat.c.cversion)
+func (stat *Stat) CVersion() int {
+	return int(stat.c.cversion)
 }
 
 // AVersion returns the number of changes to the ACL of the node.
-func (stat *Stat) AVersion() int32 {
-	return int32(stat.c.aversion)
+func (stat *Stat) AVersion() int {
+	return int(stat.c.aversion)
 }
 
 // If the node is an ephemeral node, EphemeralOwner returns the session id
@@ -353,13 +353,13 @@ func (stat *Stat) EphemeralOwner() int64 {
 }
 
 // DataLength returns the length of the data in the node in bytes.
-func (stat *Stat) DataLength() int32 {
-	return int32(stat.c.dataLength)
+func (stat *Stat) DataLength() int {
+	return int(stat.c.dataLength)
 }
 
 // NumChildren returns the number of children of the node.
-func (stat *Stat) NumChildren() int32 {
-	return int32(stat.c.numChildren)
+func (stat *Stat) NumChildren() int {
+	return int(stat.c.numChildren)
 }
 
 // Pzxid returns the Pzxid of the node, whatever that is.
@@ -657,7 +657,7 @@ func (conn *Conn) Create(path, value string, flags int, aclv []ACL) (pathCreated
 //
 // It is an error to attempt to set the data of a non-existing node with
 // this function. In these cases, use Create instead.
-func (conn *Conn) Set(path, value string, version int32) (stat *Stat, err error) {
+func (conn *Conn) Set(path, value string, version int) (stat *Stat, err error) {
 
 	cpath := C.CString(path)
 	cvalue := C.CString(value)
@@ -677,7 +677,7 @@ func (conn *Conn) Set(path, value string, version int32) (stat *Stat, err error)
 // Delete removes the node at path. If version is not -1, the operation
 // will only succeed if the node is still at this version when the
 // node is deleted as an atomic operation.
-func (conn *Conn) Delete(path string, version int32) (err error) {
+func (conn *Conn) Delete(path string, version int) (err error) {
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
 	rc, cerr := C.zoo_delete(conn.handle, cpath, C.int(version))
@@ -732,7 +732,7 @@ func (conn *Conn) ACL(path string) ([]ACL, *Stat, error) {
 }
 
 // SetACL changes the access control list for path.
-func (conn *Conn) SetACL(path string, aclv []ACL, version int32) error {
+func (conn *Conn) SetACL(path string, aclv []ACL, version int) error {
 
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))

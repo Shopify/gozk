@@ -142,12 +142,12 @@ func (s *S) TestGetAndStat(c *C) {
 	c.Assert(stat.Mzxid(), Equals, int64(0))
 	c.Assert(stat.CTime(), Equals, time.Unix(0, 0))
 	c.Assert(stat.MTime(), Equals, time.Unix(0, 0))
-	c.Assert(stat.Version(), Equals, int32(0))
-	c.Assert(stat.CVersion(), Equals, int32(0))
-	c.Assert(stat.AVersion(), Equals, int32(0))
+	c.Assert(stat.Version(), Equals, 0)
+	c.Assert(stat.CVersion(), Equals, 0)
+	c.Assert(stat.AVersion(), Equals, 0)
 	c.Assert(stat.EphemeralOwner(), Equals, int64(0))
-	c.Assert(stat.DataLength(), Equals, int32(0))
-	c.Assert(stat.NumChildren(), Equals, int32(1))
+	c.Assert(stat.DataLength(), Equals, 0)
+	c.Assert(stat.NumChildren(), Equals, 1)
 	c.Assert(stat.Pzxid(), Equals, int64(0))
 }
 
@@ -201,7 +201,7 @@ func (s *S) TestCreateSetAndGet(c *C) {
 	start = time.Now()
 	stat, err = conn.Set("/test", "bababum", -1) // Any version.
 	c.Assert(err, IsNil)
-	c.Assert(stat.Version(), Equals, int32(1))
+	c.Assert(stat.Version(), Equals, 1)
 	checkTimeBetween(c, "mtime", stat.MTime(), start, time.Now())
 
 	data, _, err := conn.Get("/test")
@@ -222,7 +222,7 @@ func (s *S) TestGetAndWatch(c *C) {
 	data, stat, watch, err := conn.GetW("/test")
 	c.Assert(err, IsNil)
 	c.Assert(data, Equals, "one")
-	c.Assert(stat.Version(), Equals, int32(0))
+	c.Assert(stat.Version(), Equals, 0)
 
 	select {
 	case <-watch:
@@ -313,7 +313,7 @@ func (s *S) TestChildren(c *C) {
 	children, stat, err := conn.Children("/")
 	c.Assert(err, IsNil)
 	c.Assert(children, Equals, []string{"zookeeper"})
-	c.Assert(stat.NumChildren(), Equals, int32(1))
+	c.Assert(stat.NumChildren(), Equals, 1)
 
 	children, stat, err = conn.Children("/non-existent")
 	c.Assert(err, Equals, zk.ZNONODE)
@@ -331,7 +331,7 @@ func (s *S) TestChildrenAndWatch(c *C) {
 	children, stat, watch, err := conn.ChildrenW("/")
 	c.Assert(err, IsNil)
 	c.Assert(children, Equals, []string{"zookeeper"})
-	c.Assert(stat.NumChildren(), Equals, int32(1))
+	c.Assert(stat.NumChildren(), Equals, 1)
 
 	select {
 	case <-watch:
@@ -352,7 +352,7 @@ func (s *S) TestChildrenAndWatch(c *C) {
 
 	children, stat, watch, err = conn.ChildrenW("/")
 	c.Assert(err, IsNil)
-	c.Assert(stat.NumChildren(), Equals, int32(2))
+	c.Assert(stat.NumChildren(), Equals, 2)
 
 	// The ordering is most likely unstable, so this test must be fixed.
 	c.Assert(children, Equals, []string{"test1", "zookeeper"})
@@ -432,7 +432,7 @@ func (s *S) TestExistsAndWatch(c *C) {
 	stat, watch, err = conn.ExistsW("/test")
 	c.Assert(err, IsNil)
 	c.Assert(stat, NotNil)
-	c.Assert(stat.NumChildren(), Equals, int32(0))
+	c.Assert(stat.NumChildren(), Equals, 0)
 
 	c.Check(zk.CountPendingWatches(), Equals, 2)
 }
@@ -513,7 +513,7 @@ func (s *S) TestACL(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(acl, Equals, zk.WorldACL(zk.PERM_ALL))
 	c.Assert(stat, NotNil)
-	c.Assert(stat.Version(), Equals, int32(0))
+	c.Assert(stat.Version(), Equals, 0)
 
 	acl, stat, err = conn.ACL("/non-existent")
 	c.Assert(err, NotNil)
