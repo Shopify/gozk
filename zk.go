@@ -574,7 +574,7 @@ func (conn *Conn) Exists(path string) (stat *Stat, err error) {
 	defer C.free(unsafe.Pointer(cpath))
 
 	var cstat Stat
-	rc, cerr := C.zoo_wexists(conn.handle, cpath, nil, nil, &stat.c)
+	rc, cerr := C.zoo_wexists(conn.handle, cpath, nil, nil, &cstat.c)
 
 	// We diverge a bit from the usual here: a ZNONODE is not an error
 	// for an exists call, otherwise every Exists call would have to check
