@@ -399,6 +399,7 @@ func (s *S) TestExists(c *C) {
 
 	stat, err = conn.Exists("/zookeeper")
 	c.Assert(err, IsNil)
+	c.Assert(stat.NumChildren(), Equals, 1)
 }
 
 func (s *S) TestExistsAndWatch(c *C) {
