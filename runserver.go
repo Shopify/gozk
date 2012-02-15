@@ -48,7 +48,7 @@ func getProcess(pid int) (*os.Process, error) {
 
 	// try to check if the process is actually running by sending
 	// it signal 0.
-	err = p.Signal(os.UnixSignal(0))
+	err = p.Signal(syscall.Signal(0))
 	if err == nil {
 		return p, nil
 	}
@@ -136,7 +136,7 @@ func (srv *Server) Stop() error {
 	// anyway or that we can't wait for it for some other reason,
 	// for example because it was originally started by some other process.
 	_, err = p.Wait(0)
-	if e, ok := err.(*os.SyscallError); ok && e.Errno == os.ECHILD || err == os.ECHILD {
+	if e, ok := err.(*os.SyscallError); ok && e.Err == os.ECHILD {
 		// If we can't wait for the server, it's possible that it was running
 		// but not as a child of this process, so the only thing we can do
 		// is to poll until it exits. If the process has taken longer than
