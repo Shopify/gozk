@@ -24,8 +24,8 @@ var NotRunning = errors.New("process not running")
 func (srv *Server) Process() (*os.Process, error) {
 	data, err := ioutil.ReadFile(srv.path("pid.txt"))
 	if err != nil {
-		if err, ok := err.(*os.PathError); ok && err.Err == os.ENOENT {
-			return nil, NotRunning
+		if os.IsNotExist(err) {
+			err = NotRunning
 		}
 		return nil, err
 	}
@@ -131,12 +131,11 @@ func (srv *Server) Stop() error {
 	if err := p.Kill(); err != nil {
 		return fmt.Errorf("cannot kill server process: %v", err)
 	}
-	// ignore the error returned from Wait because there's little
+	// Ignore the error returned from Wait because there's little
 	// we can do about it - it either means that the process has just exited
 	// anyway or that we can't wait for it for some other reason,
 	// for example because it was originally started by some other process.
-	_, err = p.Wait(0)
-	if e, ok := err.(*os.SyscallError); ok && e.Err == os.ECHILD {
+	if _, err := p.Wait(); err != nil {
 		// If we can't wait for the server, it's possible that it was running
 		// but not as a child of this process, so the only thing we can do
 		// is to poll until it exits. If the process has taken longer than
