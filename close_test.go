@@ -61,15 +61,6 @@ var requestFuncs = []func(conn *zk.Conn, path string) error {
 	},
 }
 
-// nonRequestFuncs holds the requests that take a read
-// lock that do not make a round trip to the server
-// but do return an error (ClientId is omitted for this reason)
-var nonRequestFuncs = []func(conn *zk.Conn, path string) error {
-	func(conn *zk.Conn, path string) error {
-		return conn.AddAuth("digest", "username:password")
-	},
-}
-
 func (s *S) TestConcurrentClose(c *C) {
 	// make sure the server is ready to receive connections.
 	s.init(c)
