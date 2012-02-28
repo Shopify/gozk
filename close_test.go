@@ -12,8 +12,8 @@ import (
 // requestFuncs holds all the requests that take a read lock
 // on the zk connection except those that don't actually
 // make a round trip to the server.
-var requestFuncs = []func(conn *zk.Conn, path string) error {
-	func(conn *zk.Conn, path string)  error {
+var requestFuncs = []func(conn *zk.Conn, path string) error{
+	func(conn *zk.Conn, path string) error {
 		_, err := conn.Create(path, "", 0, nil)
 		return err
 	},
@@ -66,12 +66,25 @@ func (s *S) TestConcurrentClose(c *C) {
 	s.init(c)
 
 	// Close should wait until all outstanding requests have
-	// completed before returning.  We check that by interposing a
-	// proxy between the client and the server, so that we can delay
-	// requests arbitrarily. We try each kind of request in turn with
-	// a new connection, ignoring error returns, because we don't care
-	// what the operation does, just whether actually makes some kind
-	// of transaction.
+	// completed before returning.  The idea of this test is that
+	// any request that requests or changes a zookeeper node must
+	// make at least one round trip to the server, so we interpose a
+	// proxy between the client and the server which can stop all
+	// incoming traffic on demand, thus blocking the request until
+	// we want it to unblock.
+	//
+	// We assume that all requests take less than 0.1s to complete,
+	// thus when we wait below, neither of the above goroutines
+	// should complete within the allotted time (the request because
+	// it's waiting for a reply from the server and the close
+	// because it's waiting for the request to complete).  If the
+	// locking doesn't work, the Close will return early.  If the
+	// proxy blocking doesn't work, the request will return early.
+	//
+	// When we reenable incoming messages from the server, both
+	// goroutines should complete.  We can't tell which completes
+	// first, but the fact that the close blocked is sufficient to
+	// tell that the locking is working correctly.
 	for i, f := range requestFuncs {
 		c.Logf("iter %d", i)
 		p := newProxy(c, s.zkAddr)
@@ -152,21 +165,14 @@ func newProxy(c *C, dstAddr string) *proxy {
 					return
 				}
 				defer server.Close()
-				done := make(chan bool)
-				go func() {
-					io.Copy(&haltableWriter{
-						w:     client,
-						stop:  p.stop,
-						start: p.start},
-						server)
-					done <- true
-				}()
-				go func() {
-					io.Copy(server, client)
-					done <- true
-				}()
-				<-done
-				<-done
+				go io.Copy(&haltableWriter{
+					w:     client,
+					stop:  p.stop,
+					start: p.start},
+					server)
+				// When the client is closed, the deferred closes will
+				// take down the other io.Copy too.
+				io.Copy(server, client)
 			}()
 		}
 	}()
