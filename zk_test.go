@@ -312,7 +312,7 @@ func (s *S) TestChildren(c *C) {
 
 	children, stat, err := conn.Children("/")
 	c.Assert(err, IsNil)
-	c.Assert(children, Equals, []string{"zookeeper"})
+	c.Assert(children, DeepEquals, []string{"zookeeper"})
 	c.Assert(stat.NumChildren(), Equals, 1)
 
 	children, stat, err = conn.Children("/non-existent")
@@ -330,7 +330,7 @@ func (s *S) TestChildrenAndWatch(c *C) {
 
 	children, stat, watch, err := conn.ChildrenW("/")
 	c.Assert(err, IsNil)
-	c.Assert(children, Equals, []string{"zookeeper"})
+	c.Assert(children, DeepEquals, []string{"zookeeper"})
 	c.Assert(stat.NumChildren(), Equals, 1)
 
 	select {
@@ -355,7 +355,7 @@ func (s *S) TestChildrenAndWatch(c *C) {
 	c.Assert(stat.NumChildren(), Equals, 2)
 
 	// The ordering is most likely unstable, so this test must be fixed.
-	c.Assert(children, Equals, []string{"test1", "zookeeper"})
+	c.Assert(children, DeepEquals, []string{"test1", "zookeeper"})
 
 	select {
 	case <-watch:
@@ -481,7 +481,7 @@ func (s *S) TestClientIdAndReInit(c *C) {
 	defer zk2.Close()
 	clientId2 := zk2.ClientId()
 
-	c.Assert(clientId1, Equals, clientId2)
+	c.Assert(clientId1, DeepEquals, clientId2)
 }
 
 // Surprisingly for some (including myself, initially), the watch
@@ -512,7 +512,7 @@ func (s *S) TestACL(c *C) {
 
 	acl, stat, err := conn.ACL("/test")
 	c.Assert(err, IsNil)
-	c.Assert(acl, Equals, zk.WorldACL(zk.PERM_ALL))
+	c.Assert(acl, DeepEquals, zk.WorldACL(zk.PERM_ALL))
 	c.Assert(stat, NotNil)
 	c.Assert(stat.Version(), Equals, 0)
 
@@ -538,7 +538,7 @@ func (s *S) TestSetACL(c *C) {
 
 	acl, _, err := conn.ACL("/test")
 	c.Assert(err, IsNil)
-	c.Assert(acl, Equals, zk.WorldACL(zk.PERM_READ))
+	c.Assert(acl, DeepEquals, zk.WorldACL(zk.PERM_READ))
 }
 
 func (s *S) TestAddAuth(c *C) {

@@ -31,6 +31,7 @@ type S struct {
 var logLevel = 0 //zk.LOG_ERROR
 
 func (s *S) init(c *C) (*zk.Conn, chan zk.Event) {
+	c.Logf("init dialling %q", s.zkAddr)
 	conn, watch, err := zk.Dial(s.zkAddr, 5e9)
 	c.Assert(err, IsNil)
 	s.handles = append(s.handles, conn)
@@ -71,7 +72,7 @@ func (s *S) init(c *C) (*zk.Conn, chan zk.Event) {
 
 func (s *S) SetUpTest(c *C) {
 	c.Assert(zk.CountPendingWatches(), Equals, 0,
-		Bug("Test got a dirty watch state before running!"))
+		Commentf("Test got a dirty watch state before running!"))
 	zk.SetLogLevel(logLevel)
 }
 
@@ -95,7 +96,7 @@ func (s *S) TearDownTest(c *C) {
 	s.handles = make([]*zk.Conn, 0)
 
 	c.Assert(zk.CountPendingWatches(), Equals, 0,
-		Bug("Test left live watches behind!"))
+		Commentf("Test left live watches behind!"))
 }
 
 // We use the suite set up and tear down to manage a custom ZooKeeper
@@ -104,7 +105,7 @@ func (s *S) SetUpSuite(c *C) {
 	var err error
 	s.deadWatches = make(chan bool)
 
-	// N.B. We meed to create a subdirectory because zk.CreateServer
+	// N.B. We need to create a subdirectory because zk.CreateServer
 	// insists on creating its own directory.
 
 	s.zkTestRoot = c.MkDir() + "/zk"

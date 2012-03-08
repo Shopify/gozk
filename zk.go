@@ -32,7 +32,7 @@ type Conn struct {
 	watchChannels  map[uintptr]chan Event
 	sessionWatchId uintptr
 	handle         *C.zhandle_t
-	mutex          sync.Mutex
+	mutex          sync.RWMutex
 }
 
 // ClientId represents an established ZooKeeper session.  It can be
@@ -429,6 +429,8 @@ func dial(servers string, recvTimeout time.Duration, clientId *ClientId) (*Conn,
 // ClientId returns the client ID for the existing session with ZooKeeper.
 // This is useful to reestablish an existing session via ReInit.
 func (conn *Conn) ClientId() *ClientId {
+	conn.mutex.RLock()
+	defer conn.mutex.RUnlock()
 	return &ClientId{*C.zoo_client_id(conn.handle)}
 }
 
@@ -459,6 +461,11 @@ func (conn *Conn) Close() error {
 // unless an error is found. Attempting to retrieve data from a non-existing
 // node is an error.
 func (conn *Conn) Get(path string) (data string, stat *Stat, err error) {
+	conn.mutex.RLock()
+	defer conn.mutex.RUnlock()
+	if conn.handle == nil {
+		return "", nil, ZCLOSING
+	}
 
 	cpath := C.CString(path)
 	cbuffer := (*C.char)(C.malloc(bufferSize))
@@ -481,6 +488,11 @@ func (conn *Conn) Get(path string) (data string, stat *Stat, err error) {
 // node changes or when critical session events happen.  See the
 // documentation of the Event type for more details.
 func (conn *Conn) GetW(path string) (data string, stat *Stat, watch <-chan Event, err error) {
+	conn.mutex.RLock()
+	defer conn.mutex.RUnlock()
+	if conn.handle == nil {
+		return "", nil, nil, ZCLOSING
+	}
 
 	cpath := C.CString(path)
 	cbuffer := (*C.char)(C.malloc(bufferSize))
@@ -504,6 +516,11 @@ func (conn *Conn) GetW(path string) (data string, stat *Stat, watch <-chan Event
 // Children returns the children list and status from an existing node.
 // Attempting to retrieve the children list from a non-existent node is an error.
 func (conn *Conn) Children(path string) (children []string, stat *Stat, err error) {
+	conn.mutex.RLock()
+	defer conn.mutex.RUnlock()
+	if conn.handle == nil {
+		return nil, nil, ZCLOSING
+	}
 
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
@@ -529,6 +546,11 @@ func (conn *Conn) Children(path string) (children []string, stat *Stat, err erro
 // provided path or when critical session events happen.  See the documentation
 // of the Event type for more details.
 func (conn *Conn) ChildrenW(path string) (children []string, stat *Stat, watch <-chan Event, err error) {
+	conn.mutex.RLock()
+	defer conn.mutex.RUnlock()
+	if conn.handle == nil {
+		return nil, nil, nil, ZCLOSING
+	}
 
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
@@ -570,6 +592,12 @@ func parseStringVector(cvector *C.struct_String_vector) []string {
 // stat will contain meta information on the existing node, otherwise
 // it will be nil.
 func (conn *Conn) Exists(path string) (stat *Stat, err error) {
+	conn.mutex.RLock()
+	defer conn.mutex.RUnlock()
+	if conn.handle == nil {
+		return nil, ZCLOSING
+	}
+
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
 
@@ -593,6 +621,12 @@ func (conn *Conn) Exists(path string) (stat *Stat, err error) {
 // is removed. It will also receive critical session events. See the
 // documentation of the Event type for more details.
 func (conn *Conn) ExistsW(path string) (stat *Stat, watch <-chan Event, err error) {
+	conn.mutex.RLock()
+	defer conn.mutex.RUnlock()
+	if conn.handle == nil {
+		return nil, nil, ZCLOSING
+	}
+
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
 
@@ -627,6 +661,12 @@ func (conn *Conn) ExistsW(path string) (stat *Stat, watch <-chan Event, err erro
 // from the requested one, such as when a sequence number is appended
 // to it due to the use of the gozk.SEQUENCE flag.
 func (conn *Conn) Create(path, value string, flags int, aclv []ACL) (pathCreated string, err error) {
+	conn.mutex.RLock()
+	defer conn.mutex.RUnlock()
+	if conn.handle == nil {
+		return "", ZCLOSING
+	}
+
 	cpath := C.CString(path)
 	cvalue := C.CString(value)
 	defer C.free(unsafe.Pointer(cpath))
@@ -658,6 +698,11 @@ func (conn *Conn) Create(path, value string, flags int, aclv []ACL) (pathCreated
 // It is an error to attempt to set the data of a non-existing node with
 // this function. In these cases, use Create instead.
 func (conn *Conn) Set(path, value string, version int) (stat *Stat, err error) {
+	conn.mutex.RLock()
+	defer conn.mutex.RUnlock()
+	if conn.handle == nil {
+		return nil, ZCLOSING
+	}
 
 	cpath := C.CString(path)
 	cvalue := C.CString(value)
@@ -678,6 +723,12 @@ func (conn *Conn) Set(path, value string, version int) (stat *Stat, err error) {
 // will only succeed if the node is still at this version when the
 // node is deleted as an atomic operation.
 func (conn *Conn) Delete(path string, version int) (err error) {
+	conn.mutex.RLock()
+	defer conn.mutex.RUnlock()
+	if conn.handle == nil {
+		return ZCLOSING
+	}
+
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
 	rc, cerr := C.zoo_delete(conn.handle, cpath, C.int(version))
@@ -690,6 +741,12 @@ func (conn *Conn) Delete(path string, version int) (err error) {
 // identity data itself. For instance, the "digest" scheme requires
 // a pair like "username:password" to be provided as the certificate.
 func (conn *Conn) AddAuth(scheme, cert string) error {
+	conn.mutex.RLock()
+	defer conn.mutex.RUnlock()
+	if conn.handle == nil {
+		return ZCLOSING
+	}
+
 	cscheme := C.CString(scheme)
 	ccert := C.CString(cert)
 	defer C.free(unsafe.Pointer(cscheme))
@@ -714,6 +771,11 @@ func (conn *Conn) AddAuth(scheme, cert string) error {
 
 // ACL returns the access control list for path.
 func (conn *Conn) ACL(path string) ([]ACL, *Stat, error) {
+	conn.mutex.RLock()
+	defer conn.mutex.RUnlock()
+	if conn.handle == nil {
+		return nil, nil, ZCLOSING
+	}
 
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
@@ -733,6 +795,11 @@ func (conn *Conn) ACL(path string) ([]ACL, *Stat, error) {
 
 // SetACL changes the access control list for path.
 func (conn *Conn) SetACL(path string, aclv []ACL, version int) error {
+	conn.mutex.RLock()
+	defer conn.mutex.RUnlock()
+	if conn.handle == nil {
+		return ZCLOSING
+	}
 
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
