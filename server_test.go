@@ -230,7 +230,9 @@ func (s *S) TestCreateServer(c *C) {
 	c.Assert(err, IsNil)
 
 	_, err = os.Stat(zkdir)
-	c.Assert(err, IsNil)
+	if !os.IsNotExist(err) {
+		c.Errorf("expected not-exists error, got %v", err)
+	}
 
 	// Check that we can call CreateServer on the empty directory
 	srv, err = zk.CreateServer(8888, dir, "")

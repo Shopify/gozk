@@ -15,17 +15,19 @@ import (
 	"time"
 )
 
-var NotRunning = errors.New("process not running")
+// ErrNotRunning is the error returned when Process cannot
+// find the currently running zookeeper process.
+var ErrNotRunning = errors.New("process not running")
 
 // Process returns a Process referring to the running server from
 // where it's been stored in pid.txt. If the file does not
 // exist, or it cannot find the process, it returns the error
-// NotRunning.
+// ErrNotRunning.
 func (srv *Server) Process() (*os.Process, error) {
 	data, err := ioutil.ReadFile(srv.path("pid.txt"))
 	if err != nil {
 		if os.IsNotExist(err) {
-			err = NotRunning
+			err = ErrNotRunning
 		}
 		return nil, err
 	}
@@ -39,7 +41,7 @@ func (srv *Server) Process() (*os.Process, error) {
 // getProcess gets a Process from a pid and checks that the
 // process is actually running. If the process
 // is not running, then getProcess returns a nil
-// Process and the error NotRunning.
+// Process and the error ErrNotRunning.
 func getProcess(pid int) (*os.Process, error) {
 	p, err := os.FindProcess(pid)
 	if err != nil {
@@ -53,7 +55,7 @@ func getProcess(pid int) (*os.Process, error) {
 		return p, nil
 	}
 	if err == syscall.ESRCH {
-		return nil, NotRunning
+		return nil, ErrNotRunning
 	}
 	return nil, errors.New("server running but inaccessible")
 }
@@ -65,7 +67,7 @@ func (srv *Server) Start() error {
 		return err
 	}
 	p, err := srv.Process()
-	if err == nil || err != NotRunning {
+	if err == nil || err != ErrNotRunning {
 		if p != nil {
 			p.Release()
 		}
@@ -122,7 +124,7 @@ func (srv *Server) Start() error {
 func (srv *Server) Stop() error {
 	p, err := srv.Process()
 	if p == nil {
-		if err != nil {
+		if err != nil && err != ErrNotRunning {
 			return fmt.Errorf("cannot read process ID of server: %v", err)
 		}
 		return nil

@@ -25,7 +25,7 @@ func (s *S) TestRetryChangeCreating(c *C) {
 
 	acl, _, err := conn.ACL("/test")
 	c.Assert(err, IsNil)
-	c.Assert(acl, Equals, zk.WorldACL(zk.PERM_ALL))
+	c.Assert(acl, DeepEquals, zk.WorldACL(zk.PERM_ALL))
 }
 
 func (s *S) TestRetryChangeSetting(c *C) {
@@ -52,7 +52,7 @@ func (s *S) TestRetryChangeSetting(c *C) {
 	// ACL was unchanged by RetryChange().
 	acl, _, err := conn.ACL("/test")
 	c.Assert(err, IsNil)
-	c.Assert(acl, Equals, zk.WorldACL(zk.PERM_ALL))
+	c.Assert(acl, DeepEquals, zk.WorldACL(zk.PERM_ALL))
 }
 
 func (s *S) TestRetryChangeUnchangedValueDoesNothing(c *C) {
@@ -177,7 +177,7 @@ func (s *S) TestRetryChangeConflictOnSetDueToDelete(c *C) {
 	// Should be the new ACL.
 	acl, _, err := conn.ACL("/test")
 	c.Assert(err, IsNil)
-	c.Assert(acl, Equals, zk.WorldACL(zk.PERM_READ))
+	c.Assert(acl, DeepEquals, zk.WorldACL(zk.PERM_READ))
 }
 
 func (s *S) TestRetryChangeErrorInCallback(c *C) {

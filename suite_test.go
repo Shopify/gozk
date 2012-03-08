@@ -31,6 +31,7 @@ type S struct {
 var logLevel = 0 //zk.LOG_ERROR
 
 func (s *S) init(c *C) (*zk.Conn, chan zk.Event) {
+	c.Logf("init dialling %q", s.zkAddr)
 	conn, watch, err := zk.Dial(s.zkAddr, 5e9)
 	c.Assert(err, IsNil)
 	s.handles = append(s.handles, conn)
