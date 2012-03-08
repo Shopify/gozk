@@ -34,10 +34,10 @@ func CreateServer(port int, runDir, zkDir string) (*Server, error) {
 		}
 		info, err := ioutil.ReadDir(runDir)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if len(info) != 0 {
-			return fmt.Errorf("server directory %q is not empty")
+			return nil, fmt.Errorf("server directory %q is not empty")
 		}
 	}
 	srv := &Server{runDir: runDir, zkDir: zkDir}
@@ -96,6 +96,16 @@ func (srv *Server) networkPort() (int, error) {
 		}
 	}
 	panic("not reached")
+}
+
+// Addr returns a local host address that can be used
+// to contact the server when it is running.
+func (srv *Server) Addr() (string, error) {
+	port, err := srv.networkPort()
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("127.0.0.1:%d", port), nil
 }
 
 // command returns the command used to start the
