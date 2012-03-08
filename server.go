@@ -18,9 +18,10 @@ type Server struct {
 	zkDir  string
 }
 
-// CreateServer creates the directory runDir and sets up a ZooKeeper server
-// environment inside it. It is an error if runDir already exists.
-// The server will listen on the specified TCP port.
+// CreateServer creates the directory runDir and sets up a ZooKeeper
+// server environment inside it.  It is an error if runDir already
+// exists and is not empty.  The server will listen on the specified TCP
+// port.
 // 
 // The ZooKeeper installation directory is specified by zkDir.
 // If this is empty, a system default will be used.
@@ -28,7 +29,16 @@ type Server struct {
 // CreateServer does not start the server.
 func CreateServer(port int, runDir, zkDir string) (*Server, error) {
 	if err := os.Mkdir(runDir, 0777); err != nil {
-		return nil, err
+		if !os.IsExist(err) {
+			return nil, err
+		}
+		info, err := ioutil.ReadDir(runDir)
+		if err != nil {
+			return err
+		}
+		if len(info) != 0 {
+			return fmt.Errorf("server directory %q is not empty")
+		}
 	}
 	srv := &Server{runDir: runDir, zkDir: zkDir}
 	if err := srv.writeLog4JConfig(); err != nil {
