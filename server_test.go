@@ -201,3 +201,46 @@ func (s *S) testAttachServerAbnormalTerminate(c *C, start func(*S, *C, bool)) {
 	err = srv.Stop()
 	c.Assert(err, IsNil)
 }
+
+func (s *S) TestCreateServer(c *C) {
+	dir := c.MkDir()
+
+	zkdir := dir + "/zk"
+	// Check that it creates the new directory.
+	srv, err := zk.CreateServer(9999, zkdir, "")
+	c.Assert(err, IsNil)
+	c.Assert(srv, NotNil)
+
+	info, err := os.Stat(zkdir)
+	c.Assert(err, IsNil)
+	c.Assert(info.IsDir(), Equals, true)
+
+	addr, err := srv.Addr()
+	c.Assert(err, IsNil)
+	c.Assert(addr, Equals, "127.0.0.1:9999")
+
+	// Check that it fails when called again on the non-empty directory.
+	_, err = zk.CreateServer(9999, zkdir, "")
+	c.Assert(err, ErrorMatches, `server directory .* is not empty`)
+
+	// Check that Destroy removes the directory.
+	err = srv.Destroy()
+	c.Assert(err, IsNil)
+
+	_, err = os.Stat(zkdir)
+	if !os.IsNotExist(err) {
+		c.Errorf("expected not-exists error, got %v", err)
+	}
+
+	// Check that we can call CreateServer on the empty directory
+	srv, err = zk.CreateServer(8888, dir, "")
+	c.Assert(err, IsNil)
+	c.Assert(srv, NotNil)
+
+	addr, err = srv.Addr()
+	c.Assert(err, IsNil)
+	c.Assert(addr, Equals, "127.0.0.1:8888")
+
+	err = srv.Destroy()
+	c.Assert(err, IsNil)
+}
