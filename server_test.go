@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	. "launchpad.net/gocheck"
 	zk "launchpad.net/gozk/zookeeper"
 	"os"
@@ -204,8 +203,7 @@ func (s *S) testAttachServerAbnormalTerminate(c *C, start func(*S, *C, bool)) {
 }
 
 func (s *S) TestCreateServer(c *C) {
-	dir, err := ioutil.TempDir("", "zktest-")
-	c.Assert(err, IsNil)
+	dir := c.MkDir()
 
 	zkdir := dir + "/zk"
 	// Check that it creates the new directory.
