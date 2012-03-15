@@ -117,9 +117,9 @@ func (e *Error) Error() string {
 	return fmt.Sprintf("zookeeper: %s %q: %v", e.Op, e.Path, s)
 }
 
-// HasErrorCode returns whether the error has the given
-// error code.
-func HasErrorCode(err error, code ErrorCode) bool {
+// IsError returns whether the error is a *Error
+// with the given error code.
+func IsError(err error, code ErrorCode) bool {
 	if err, _ := err.(*Error); err != nil {
 		return err.Code == code
 	}
@@ -177,6 +177,10 @@ func zkError(rc C.int, cerr error, op, path string) error {
 		err.SystemError = cerr
 	}
 	return err
+}
+
+func closingError(op, path string) error {
+	return zkError(C.int(ZCLOSING), nil, op, path)
 }
 
 // Constants for SetLogLevel.
@@ -454,10 +458,6 @@ func dial(servers string, recvTimeout time.Duration, clientId *ClientId) (*Conn,
 	return conn, watchChannel, nil
 }
 
-func errClosing(op string) error {
-	return zkError(C.int(ZCLOSING), nil, op, "")
-}
-
 // ClientId returns the client ID for the existing session with ZooKeeper.
 // This is useful to reestablish an existing session via ReInit.
 func (conn *Conn) ClientId() *ClientId {
@@ -476,7 +476,7 @@ func (conn *Conn) Close() error {
 	if conn.handle == nil {
 		// ZooKeeper may hang indefinitely if a handler is closed twice,
 		// so we get in the way and prevent it from happening.
-		return errClosing("close")
+		return closingError("close", "")
 	}
 	rc, cerr := C.zookeeper_close(conn.handle)
 
@@ -496,7 +496,7 @@ func (conn *Conn) Get(path string) (data string, stat *Stat, err error) {
 	conn.mutex.RLock()
 	defer conn.mutex.RUnlock()
 	if conn.handle == nil {
-		return "", nil, errClosing("get")
+		return "", nil, closingError("get", path)
 	}
 
 	cpath := C.CString(path)
@@ -523,7 +523,7 @@ func (conn *Conn) GetW(path string) (data string, stat *Stat, watch <-chan Event
 	conn.mutex.RLock()
 	defer conn.mutex.RUnlock()
 	if conn.handle == nil {
-		return "", nil, nil, errClosing("getW")
+		return "", nil, nil, closingError("getw", path)
 	}
 
 	cpath := C.CString(path)
@@ -538,7 +538,7 @@ func (conn *Conn) GetW(path string) (data string, stat *Stat, watch <-chan Event
 	rc, cerr := C.zoo_wget(conn.handle, cpath, C.watch_handler, unsafe.Pointer(watchId), cbuffer, &cbufferLen, &cstat.c)
 	if rc != C.ZOK {
 		conn.forgetWatch(watchId)
-		return "", nil, nil, zkError(rc, cerr, "getW", path)
+		return "", nil, nil, zkError(rc, cerr, "getw", path)
 	}
 
 	result := C.GoStringN(cbuffer, cbufferLen)
@@ -551,7 +551,7 @@ func (conn *Conn) Children(path string) (children []string, stat *Stat, err erro
 	conn.mutex.RLock()
 	defer conn.mutex.RUnlock()
 	if conn.handle == nil {
-		return nil, nil, errClosing("children")
+		return nil, nil, closingError("children", path)
 	}
 
 	cpath := C.CString(path)
@@ -581,7 +581,7 @@ func (conn *Conn) ChildrenW(path string) (children []string, stat *Stat, watch <
 	conn.mutex.RLock()
 	defer conn.mutex.RUnlock()
 	if conn.handle == nil {
-		return nil, nil, nil, errClosing("childrenW")
+		return nil, nil, nil, closingError("childrenw", path)
 	}
 
 	cpath := C.CString(path)
@@ -602,7 +602,7 @@ func (conn *Conn) ChildrenW(path string) (children []string, stat *Stat, watch <
 		watch = watchChannel
 	} else {
 		conn.forgetWatch(watchId)
-		err = zkError(rc, cerr, "childrenW", path)
+		err = zkError(rc, cerr, "childrenw", path)
 	}
 	return
 }
@@ -627,7 +627,7 @@ func (conn *Conn) Exists(path string) (stat *Stat, err error) {
 	conn.mutex.RLock()
 	defer conn.mutex.RUnlock()
 	if conn.handle == nil {
-		return nil, errClosing("exists")
+		return nil, closingError("exists", path)
 	}
 
 	cpath := C.CString(path)
@@ -656,7 +656,7 @@ func (conn *Conn) ExistsW(path string) (stat *Stat, watch <-chan Event, err erro
 	conn.mutex.RLock()
 	defer conn.mutex.RUnlock()
 	if conn.handle == nil {
-		return nil, nil, errClosing("existsW")
+		return nil, nil, closingError("existsw", path)
 	}
 
 	cpath := C.CString(path)
@@ -678,7 +678,7 @@ func (conn *Conn) ExistsW(path string) (stat *Stat, watch <-chan Event, err erro
 		watch = watchChannel
 	default:
 		conn.forgetWatch(watchId)
-		err = zkError(rc, cerr, "existsW", path)
+		err = zkError(rc, cerr, "existsw", path)
 	}
 	return
 }
@@ -696,7 +696,7 @@ func (conn *Conn) Create(path, value string, flags int, aclv []ACL) (pathCreated
 	conn.mutex.RLock()
 	defer conn.mutex.RUnlock()
 	if conn.handle == nil {
-		return "", errClosing("close")
+		return "", closingError("close", path)
 	}
 
 	cpath := C.CString(path)
@@ -733,7 +733,7 @@ func (conn *Conn) Set(path, value string, version int) (stat *Stat, err error) {
 	conn.mutex.RLock()
 	defer conn.mutex.RUnlock()
 	if conn.handle == nil {
-		return nil, errClosing("set")
+		return nil, closingError("set", path)
 	}
 
 	cpath := C.CString(path)
@@ -758,7 +758,7 @@ func (conn *Conn) Delete(path string, version int) (err error) {
 	conn.mutex.RLock()
 	defer conn.mutex.RUnlock()
 	if conn.handle == nil {
-		return errClosing("delete")
+		return closingError("delete", path)
 	}
 
 	cpath := C.CString(path)
@@ -776,7 +776,7 @@ func (conn *Conn) AddAuth(scheme, cert string) error {
 	conn.mutex.RLock()
 	defer conn.mutex.RUnlock()
 	if conn.handle == nil {
-		return errClosing("addauth")
+		return closingError("addauth", "")
 	}
 
 	cscheme := C.CString(scheme)
@@ -806,7 +806,7 @@ func (conn *Conn) ACL(path string) ([]ACL, *Stat, error) {
 	conn.mutex.RLock()
 	defer conn.mutex.RUnlock()
 	if conn.handle == nil {
-		return nil, nil, errClosing("ACL")
+		return nil, nil, closingError("acl", path)
 	}
 
 	cpath := C.CString(path)
@@ -817,7 +817,7 @@ func (conn *Conn) ACL(path string) ([]ACL, *Stat, error) {
 	var cstat Stat
 	rc, cerr := C.zoo_get_acl(conn.handle, cpath, &caclv, &cstat.c)
 	if rc != C.ZOK {
-		return nil, nil, zkError(rc, cerr, "ACL", path)
+		return nil, nil, zkError(rc, cerr, "acl", path)
 	}
 
 	aclv := parseACLVector(&caclv)
@@ -830,7 +830,7 @@ func (conn *Conn) SetACL(path string, aclv []ACL, version int) error {
 	conn.mutex.RLock()
 	defer conn.mutex.RUnlock()
 	if conn.handle == nil {
-		return errClosing("setACL")
+		return closingError("setacl", path)
 	}
 
 	cpath := C.CString(path)
@@ -840,7 +840,7 @@ func (conn *Conn) SetACL(path string, aclv []ACL, version int) error {
 	defer C.deallocate_ACL_vector(caclv)
 
 	rc, cerr := C.zoo_set_acl(conn.handle, cpath, C.int(version), caclv)
-	return zkError(rc, cerr, "setACL", path)
+	return zkError(rc, cerr, "setacl", path)
 }
 
 func parseACLVector(caclv *C.struct_ACL_vector) []ACL {
@@ -922,7 +922,7 @@ type ChangeFunc func(oldValue string, oldStat *Stat) (newValue string, err error
 func (conn *Conn) RetryChange(path string, flags int, acl []ACL, changeFunc ChangeFunc) error {
 	for {
 		oldValue, oldStat, err := conn.Get(path)
-		if err != nil && !HasErrorCode(err, ZNONODE) {
+		if err != nil && !IsError(err, ZNONODE) {
 			return err
 		}
 		newValue, err := changeFunc(oldValue, oldStat)
@@ -931,7 +931,7 @@ func (conn *Conn) RetryChange(path string, flags int, acl []ACL, changeFunc Chan
 		}
 		if oldStat == nil {
 			_, err := conn.Create(path, newValue, flags, acl)
-			if err == nil || !HasErrorCode(err, ZNODEEXISTS) {
+			if err == nil || !IsError(err, ZNODEEXISTS) {
 				return err
 			}
 			continue
@@ -940,7 +940,7 @@ func (conn *Conn) RetryChange(path string, flags int, acl []ACL, changeFunc Chan
 			return nil // Nothing to do.
 		}
 		_, err = conn.Set(path, newValue, oldStat.Version())
-		if err == nil || !HasErrorCode(err, ZBADVERSION) && !HasErrorCode(err, ZNONODE) {
+		if err == nil || !IsError(err, ZBADVERSION) && !IsError(err, ZNONODE) {
 			return err
 		}
 	}
