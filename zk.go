@@ -99,11 +99,11 @@ type Event struct {
 
 // Error represents a ZooKeeper error.
 type Error struct {
-	Op string
+	Op   string
 	Code ErrorCode
 	// SystemError holds an error if Code is ZSYSTEMERROR.
 	SystemError error
-	Path string
+	Path        string
 }
 
 func (e *Error) Error() string {
@@ -169,7 +169,7 @@ func zkError(rc C.int, cerr error, op, path string) error {
 		return nil
 	}
 	err := &Error{
-		Op: op,
+		Op:   op,
 		Code: code,
 		Path: path,
 	}
