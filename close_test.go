@@ -130,7 +130,7 @@ func (s *S) TestConcurrentClose(c *C) {
 		}
 		p.close()
 		err = f(conn, "/closetest")
-		c.Check(err, Equals, zk.ZCLOSING)
+		c.Check(zk.HasErrorCode(err, zk.ZCLOSING), Equals, true, Commentf("%v", err))
 	}
 }
 

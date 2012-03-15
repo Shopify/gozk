@@ -25,7 +25,7 @@ func (s *S) TestInitErrorThroughErrno(c *C) {
 	}
 	c.Assert(conn, IsNil)
 	c.Assert(watch, IsNil)
-	c.Assert(err, ErrorMatches, "invalid argument")
+	c.Assert(err, ErrorMatches, "zookeeper: dial: invalid argument")
 }
 
 func (s *S) TestRecvTimeoutInitParameter(c *C) {
@@ -42,7 +42,7 @@ func (s *S) TestRecvTimeoutInitParameter(c *C) {
 	for i := 0; i != 1000; i++ {
 		_, _, err := conn.Get("/zookeeper")
 		if err != nil {
-			c.Assert(err, ErrorMatches, "operation timeout")
+			c.Check(zk.HasErrorCode(err, zk.ZOPERATIONTIMEOUT), Equals, true, Commentf("%v", err))
 			c.SucceedNow()
 		}
 	}
@@ -158,8 +158,8 @@ func (s *S) TestGetAndError(c *C) {
 
 	c.Assert(data, Equals, "")
 	c.Assert(stat, IsNil)
-	c.Assert(err, ErrorMatches, "no node")
-	c.Assert(err, Equals, zk.ZNONODE)
+	c.Assert(err, ErrorMatches, `zookeeper: get "/non-existent": no node`)
+	c.Check(zk.HasErrorCode(err, zk.ZNONODE), Equals, true, Commentf("%v", err))
 }
 
 func (s *S) TestCreateAndGet(c *C) {
@@ -171,7 +171,7 @@ func (s *S) TestCreateAndGet(c *C) {
 
 	// Check the error condition from Create().
 	_, err = conn.Create(path, "", zk.EPHEMERAL, zk.WorldACL(zk.PERM_ALL))
-	c.Assert(err, ErrorMatches, "node exists")
+	c.Check(zk.HasErrorCode(err, zk.ZNODEEXISTS), Equals, true, Commentf("%v", err))
 
 	data, _, err := conn.Get(path)
 	c.Assert(err, IsNil)
@@ -270,7 +270,7 @@ func (s *S) TestGetAndWatchWithError(c *C) {
 
 	_, _, watch, err := conn.GetW("/test")
 	c.Assert(err, NotNil)
-	c.Assert(err, Equals, zk.ZNONODE)
+	c.Check(zk.HasErrorCode(err, zk.ZNONODE), Equals, true, Commentf("%v", err))
 	c.Assert(watch, IsNil)
 
 	c.Check(zk.CountPendingWatches(), Equals, 1)
@@ -304,7 +304,7 @@ func (s *S) TestClosingTwiceDoesntHang(c *C) {
 	c.Assert(err, IsNil)
 	err = conn.Close()
 	c.Assert(err, NotNil)
-	c.Assert(err, Equals, zk.ZCLOSING)
+	c.Check(zk.HasErrorCode(err, zk.ZCLOSING), Equals, true, Commentf("%v", err))
 }
 
 func (s *S) TestChildren(c *C) {
@@ -316,7 +316,7 @@ func (s *S) TestChildren(c *C) {
 	c.Assert(stat.NumChildren(), Equals, 1)
 
 	children, stat, err = conn.Children("/non-existent")
-	c.Assert(err, Equals, zk.ZNONODE)
+	c.Check(zk.HasErrorCode(err, zk.ZNONODE), Equals, true, Commentf("%v", err))
 	c.Assert(children, IsNil)
 	c.Assert(stat, IsNil)
 }
@@ -383,7 +383,7 @@ func (s *S) TestChildrenAndWatchWithError(c *C) {
 
 	_, stat, watch, err := conn.ChildrenW("/test")
 	c.Assert(err, NotNil)
-	c.Assert(err, Equals, zk.ZNONODE)
+	c.Check(zk.HasErrorCode(err, zk.ZNONODE), Equals, true, Commentf("%v", err))
 	c.Assert(watch, IsNil)
 	c.Assert(stat, IsNil)
 
@@ -447,7 +447,7 @@ func (s *S) TestExistsAndWatchWithError(c *C) {
 
 	stat, watch, err := conn.ExistsW("///")
 	c.Assert(err, NotNil)
-	c.Assert(err, Equals, zk.ZBADARGUMENTS)
+	c.Check(zk.HasErrorCode(err, zk.ZBADARGUMENTS), Equals, true, Commentf("%v", err))
 	c.Assert(stat, IsNil)
 	c.Assert(watch, IsNil)
 
@@ -462,14 +462,14 @@ func (s *S) TestDelete(c *C) {
 
 	err = conn.Delete("/test", 5)
 	c.Assert(err, NotNil)
-	c.Assert(err, Equals, zk.ZBADVERSION)
+	c.Check(zk.HasErrorCode(err, zk.ZBADVERSION), Equals, true, Commentf("%v", err))
 
 	err = conn.Delete("/test", -1)
 	c.Assert(err, IsNil)
 
 	err = conn.Delete("/test", -1)
 	c.Assert(err, NotNil)
-	c.Assert(err, Equals, zk.ZNONODE)
+	c.Check(zk.HasErrorCode(err, zk.ZNONODE), Equals, true, Commentf("%v", err))
 }
 
 func (s *S) TestClientIdAndReInit(c *C) {
@@ -518,7 +518,7 @@ func (s *S) TestACL(c *C) {
 
 	acl, stat, err = conn.ACL("/non-existent")
 	c.Assert(err, NotNil)
-	c.Assert(err, Equals, zk.ZNONODE)
+	c.Check(zk.HasErrorCode(err, zk.ZNONODE), Equals, true, Commentf("%v", err))
 	c.Assert(acl, IsNil)
 	c.Assert(stat, IsNil)
 }
@@ -531,7 +531,7 @@ func (s *S) TestSetACL(c *C) {
 
 	err = conn.SetACL("/test", zk.WorldACL(zk.PERM_ALL), 5)
 	c.Assert(err, NotNil)
-	c.Assert(err, Equals, zk.ZBADVERSION)
+	c.Check(zk.HasErrorCode(err, zk.ZBADVERSION), Equals, true, Commentf("%v", err))
 
 	err = conn.SetACL("/test", zk.WorldACL(zk.PERM_READ), -1)
 	c.Assert(err, IsNil)
@@ -551,7 +551,7 @@ func (s *S) TestAddAuth(c *C) {
 
 	_, _, err = conn.Get("/test")
 	c.Assert(err, NotNil)
-	c.Assert(err, Equals, zk.ZNOAUTH)
+	c.Check(zk.HasErrorCode(err, zk.ZNOAUTH), Equals, true, Commentf("%v", err))
 
 	err = conn.AddAuth("digest", "joe:passwd")
 	c.Assert(err, IsNil)
