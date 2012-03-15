@@ -209,7 +209,7 @@ func (s *S) TestRetryChangeFailsReading(c *C) {
 			return "", nil
 		})
 	c.Assert(err, NotNil)
-	c.Assert(err, Equals, zk.ZNOAUTH)
+	c.Check(zk.IsError(err, zk.ZNOAUTH), Equals, true, Commentf("%v", err))
 
 	stat, err := conn.Exists("/test")
 	c.Assert(err, IsNil)
@@ -232,7 +232,7 @@ func (s *S) TestRetryChangeFailsSetting(c *C) {
 			called = true
 			return "", nil
 		})
-	c.Assert(err, Equals, zk.ZNOAUTH)
+	c.Check(zk.IsError(err, zk.ZNOAUTH), Equals, true, Commentf("%v", err))
 
 	stat, err := conn.Exists("/test")
 	c.Assert(err, IsNil)
@@ -256,7 +256,7 @@ func (s *S) TestRetryChangeFailsCreating(c *C) {
 			return "", nil
 		})
 	c.Assert(err, NotNil)
-	c.Assert(err, Equals, zk.ZNOAUTH)
+	c.Check(zk.IsError(err, zk.ZNOAUTH), Equals, true, Commentf("%v", err))
 
 	stat, err := conn.Exists("/test/sub")
 	c.Assert(err, IsNil)
