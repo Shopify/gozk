@@ -1,8 +1,8 @@
 package zookeeper_test
 
 import (
-	. "launchpad.net/gocheck"
 	"errors"
+	. "launchpad.net/gocheck"
 	zk "launchpad.net/gozk/zookeeper"
 	"time"
 )
@@ -35,28 +35,28 @@ func (s *S) TestErrorMessages(c *C) {
 		msg string
 	}{{
 		zk.Error{
-			Op: "foo",
+			Op:   "foo",
 			Code: zk.ZNONODE,
 			Path: "/blah",
 		},
 		`zookeeper: foo "/blah": no node`,
 	}, {
 		zk.Error{
-			Op: "foo",
+			Op:   "foo",
 			Code: zk.ZNONODE,
 		},
 		`zookeeper: foo: no node`,
 	}, {
 		zk.Error{
-			Op: "foo",
-			Code: zk.ZSYSTEMERROR,
+			Op:          "foo",
+			Code:        zk.ZSYSTEMERROR,
 			SystemError: errors.New("an error"),
-			Path: "/blah",
+			Path:        "/blah",
 		},
 		`zookeeper: foo "/blah": an error`,
 	}, {
 		zk.Error{
-			Op: "foo",
+			Op:   "foo",
 			Code: zk.ZSYSTEMERROR,
 			Path: "/blah",
 		},
@@ -66,7 +66,6 @@ func (s *S) TestErrorMessages(c *C) {
 		c.Check(t.err.Error(), Equals, t.msg)
 	}
 }
-
 
 func (s *S) TestRecvTimeoutInitParameter(c *C) {
 	conn, watch, err := zk.Dial(s.zkAddr, 0)
