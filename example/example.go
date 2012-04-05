@@ -1,29 +1,28 @@
 package main
 
 import (
-	"launchpad.net/zookeeper/zookeeper"
+	"fmt"
+	"launchpad.net/gozk/zookeeper"
+	"log"
 )
 
 func main() {
-	zk, session, err := zookeeper.Init("localhost:2181", 5000)
+	zk, session, err := zookeeper.Dial("localhost:2181", 5e9)
 	if err != nil {
-		println("Couldn't connect: " + err.String())
-		return
+		log.Fatalf("Can't connect: %v", err)
 	}
-
 	defer zk.Close()
 
 	// Wait for connection.
 	event := <-session
 	if event.State != zookeeper.STATE_CONNECTED {
-		println("Couldn't connect")
-		return
+		log.Fatalf("Can't connect: %v", event)
 	}
 
 	_, err = zk.Create("/counter", "0", 0, zookeeper.WorldACL(zookeeper.PERM_ALL))
 	if err != nil {
-		println(err.String())
+		log.Fatalf("Can't create counter: %v", err)
 	} else {
-		println("Created!")
+		fmt.Println("Counter created!")
 	}
 }
