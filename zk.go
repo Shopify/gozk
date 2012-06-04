@@ -1043,11 +1043,12 @@ func sendEvent(watchId uintptr, event Event) {
 		return
 	}
 	if event.Type == EVENT_SESSION && watchId != conn.sessionWatchId {
-		switch event.State {
-		case STATE_EXPIRED_SESSION, STATE_AUTH_FAILED:
-		default:
-			// WTF? Feels like TCP saying "dropped a dup packet, ok?"
-			return
+		if event.State == STATE_CONNECTED {
+			// The watch was established while it was still
+			// connecting, but we take all session events on
+			// non-session watches as fatal.
+			// Change the state code to make the intent clear.
+			event.State = STATE_CONNECTING
 		}
 	}
 	ch := conn.watchChannels[watchId]
