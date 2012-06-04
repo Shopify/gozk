@@ -1043,11 +1043,16 @@ func sendEvent(watchId uintptr, event Event) {
 		return
 	}
 	if event.Type == EVENT_SESSION && watchId != conn.sessionWatchId {
+		// All session events on non-session watches will be delivered
+		// and cause the watch to be closed early. We purposefully do
+		// that to enforce a simpler model that takes hiccups as
+		// important events that cause code to reestablish the state
+		// from a pristine and well known good start.
 		if event.State == STATE_CONNECTED {
-			// The watch was established while it was still
-			// connecting, but we take all session events on
-			// non-session watches as fatal.
-			// Change the state code to make the intent clear.
+			// That means the watch was established while we were still
+			// connecting to zk, but we're somewhat strict about only
+			// dealing with watches when in a well known good state.
+			// Make the intent more clear by tweaking the code.
 			event.State = STATE_CONNECTING
 		}
 	}
