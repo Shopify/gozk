@@ -1043,11 +1043,17 @@ func sendEvent(watchId uintptr, event Event) {
 		return
 	}
 	if event.Type == EVENT_SESSION && watchId != conn.sessionWatchId {
-		switch event.State {
-		case STATE_EXPIRED_SESSION, STATE_AUTH_FAILED:
-		default:
-			// WTF? Feels like TCP saying "dropped a dup packet, ok?"
-			return
+		// All session events on non-session watches will be delivered
+		// and cause the watch to be closed early. We purposefully do
+		// that to enforce a simpler model that takes hiccups as
+		// important events that cause code to reestablish the state
+		// from a pristine and well known good start.
+		if event.State == STATE_CONNECTED {
+			// That means the watch was established while we were still
+			// connecting to zk, but we're somewhat strict about only
+			// dealing with watches when in a well known good state.
+			// Make the intent more clear by tweaking the code.
+			event.State = STATE_CONNECTING
 		}
 	}
 	ch := conn.watchChannels[watchId]

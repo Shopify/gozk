@@ -325,7 +325,7 @@ func (s *S) TestCloseReleasesWatches(c *C) {
 	_, err := conn.Create("/test", "one", zk.EPHEMERAL, zk.WorldACL(zk.PERM_ALL))
 	c.Assert(err, IsNil)
 
-	_, _, _, err = conn.GetW("/test")
+	_, _, watch, err := conn.GetW("/test")
 	c.Assert(err, IsNil)
 
 	c.Assert(zk.CountPendingWatches(), Equals, 2)
@@ -333,6 +333,13 @@ func (s *S) TestCloseReleasesWatches(c *C) {
 	conn.Close()
 
 	c.Assert(zk.CountPendingWatches(), Equals, 0)
+
+	select {
+	case _, ok := <-watch:
+		c.Assert(ok, Equals, false)
+	case <-time.After(3e9):
+		c.Fatal("Watch didn't fire")
+	}
 }
 
 // By default, the ZooKeeper C client will hang indefinitely if a
@@ -634,20 +641,19 @@ func (s *S) TestWatchOnReconnection(c *C) {
 		c.Fatal("Session watch didn't fire")
 	}
 
-	// The watch channel should not, since it's not affected.
+	// The watch channel should receive just the connecting notification.
 	select {
 	case event := <-watch:
-		c.Fatalf("Exists watch fired: %s", event)
-	default:
+		c.Assert(event.State, Equals, zk.STATE_CONNECTING)
+	case <-time.After(3e9):
+		c.Fatal("Watch didn't fire")
 	}
-
-	// And it should still work.
-	_, err = conn.Create("/test", "", zk.EPHEMERAL, zk.WorldACL(zk.PERM_ALL))
-	c.Assert(err, IsNil)
-
-	event = <-watch
-	c.Assert(event.Type, Equals, zk.EVENT_CREATED)
-	c.Assert(event.Path, Equals, "/test")
+	select {
+	case _, ok := <-watch:
+		c.Assert(ok, Equals, false)
+	case <-time.After(3e9):
+		c.Fatal("Watch wasn't closed")
+	}
 
 	c.Check(zk.CountPendingWatches(), Equals, 1)
 }
@@ -691,7 +697,7 @@ func (s *S) TestWatchOnSessionExpiration(c *C) {
 
 	select {
 	case event := <-watch:
-		c.Assert(event.State, Equals, zk.STATE_EXPIRED_SESSION)
+		c.Assert(event.State, Equals, zk.STATE_CONNECTING)
 	case <-time.After(3e9):
 		c.Fatal("Watch event didn't fire")
 	}
