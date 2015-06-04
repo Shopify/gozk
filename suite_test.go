@@ -3,7 +3,7 @@ package zookeeper_test
 import (
 	"fmt"
 	. "launchpad.net/gocheck"
-	zk "launchpad.net/gozk/zookeeper"
+	zk "github.com/Shopify/gozk"
 	"os"
 	"testing"
 	"time"

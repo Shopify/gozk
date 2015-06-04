@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"launchpad.net/gozk/zookeeper"
+	"github.com/Shopify/gozk"
 	"log"
 )
 

@@ -5,7 +5,7 @@ import (
 	"flag"
 	"fmt"
 	. "launchpad.net/gocheck"
-	zk "launchpad.net/gozk/zookeeper"
+	zk "github.com/Shopify/gozk"
 	"os"
 	"os/exec"
 	"strings"
