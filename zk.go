@@ -511,8 +511,11 @@ func (conn *Conn) Get(path string) (data string, stat *Stat, err error) {
 		return "", nil, zkError(rc, cerr, "get", path)
 	}
 
-	result := C.GoStringN(cbuffer, cbufferLen)
-	return result, &cstat, nil
+	result := ""
+	if cbufferLen != -1 {
+		result = C.GoStringN(cbuffer, cbufferLen)
+	}
+	return result, &cstat, watchChannel, nil
 }
 
 // GetW works like Get but also returns a channel that will receive
@@ -541,7 +544,10 @@ func (conn *Conn) GetW(path string) (data string, stat *Stat, watch <-chan Event
 		return "", nil, nil, zkError(rc, cerr, "getw", path)
 	}
 
-	result := C.GoStringN(cbuffer, cbufferLen)
+	result := ""
+	if cbufferLen != -1 {
+		result = C.GoStringN(cbuffer, cbufferLen)
+	}
 	return result, &cstat, watchChannel, nil
 }
 
