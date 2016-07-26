@@ -515,7 +515,7 @@ func (conn *Conn) Get(path string) (data string, stat *Stat, err error) {
 	if cbufferLen != -1 {
 		result = C.GoStringN(cbuffer, cbufferLen)
 	}
-	return result, &cstat, watchChannel, nil
+	return result, &cstat, nil
 }
 
 // GetW works like Get but also returns a channel that will receive
