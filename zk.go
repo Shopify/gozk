@@ -894,6 +894,8 @@ func buildACLVector(aclv []ACL) *C.struct_ACL_vector {
 	return caclv
 }
 
+const offsetClientIdPasswd = 8
+
 func LoadClientId(b []byte) (*ClientId, error) {
 	c := &ClientId{}
 
@@ -903,7 +905,7 @@ func LoadClientId(b []byte) (*ClientId, error) {
 
 	c.cId.client_id = C.int64_t(binary.BigEndian.Uint64(b))
 	for i := uintptr(0); i < unsafe.Sizeof(c.cId.passwd); i++ {
-		c.cId.passwd[i] = C.char(b[8+i])
+		c.cId.passwd[i] = C.char(b[offsetClientIdPasswd+i])
 	}
 	return c, nil
 }
