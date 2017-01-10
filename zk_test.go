@@ -2,8 +2,8 @@ package zookeeper_test
 
 import (
 	"errors"
-	. "launchpad.net/gocheck"
 	zk "github.com/Shopify/gozk"
+	. "launchpad.net/gocheck"
 	"time"
 )
 
@@ -528,6 +528,19 @@ func (s *S) TestClientIdAndReInit(c *C) {
 	clientId2 := zk2.ClientId()
 
 	c.Assert(clientId1, DeepEquals, clientId2)
+}
+
+func (s *S) TestClientIdSerialization(c *C) {
+	zk1, _ := s.init(c)
+	clientId1 := zk1.ClientId()
+
+	b, _ := clientId1.Save()
+	clientId2, _ := zk.LoadClientId(b)
+	c.Assert(clientId1, DeepEquals, clientId2)
+
+	zk2, _, err := zk.Redial(s.zkAddr, 5e9, clientId2)
+	c.Assert(err, IsNil)
+	defer zk2.Close()
 }
 
 // Surprisingly for some (including myself, initially), the watch
