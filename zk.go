@@ -574,6 +574,8 @@ func (conn *Conn) Children(path string) (children []string, stat *Stat, err erro
 	if cvector.count != 0 {
 		children = parseStringVector(&cvector)
 	}
+	C.deallocate_String_vector(cvector)
+
 	if rc == C.ZOK {
 		stat = &cstat
 	} else {
@@ -606,6 +608,8 @@ func (conn *Conn) ChildrenW(path string) (children []string, stat *Stat, watch <
 	if cvector.count != 0 {
 		children = parseStringVector(&cvector)
 	}
+	C.deallocate_String_vector(cvector)
+
 	if rc == C.ZOK {
 		stat = &cstat
 		watch = watchChannel
@@ -625,7 +629,6 @@ func parseStringVector(cvector *C.struct_String_vector) []string {
 		cpath := *(**C.char)(unsafe.Pointer(cpathPos))
 		vector[i] = C.GoString(cpath)
 	}
-	C.deallocate_String_vector(cvector)
 	return vector
 }
 
