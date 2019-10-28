@@ -567,6 +567,8 @@ func (conn *Conn) Children(path string) (children []string, stat *Stat, err erro
 	defer C.free(unsafe.Pointer(cpath))
 
 	cvector := C.struct_String_vector{}
+	defer C.deallocate_String_vector(cvector)
+
 	var cstat Stat
 	rc, cerr := C.zoo_wget_children2(conn.handle, cpath, nil, nil, &cvector, &cstat.c)
 
@@ -574,8 +576,6 @@ func (conn *Conn) Children(path string) (children []string, stat *Stat, err erro
 	if cvector.count != 0 {
 		children = parseStringVector(&cvector)
 	}
-	C.deallocate_String_vector(cvector)
-
 	if rc == C.ZOK {
 		stat = &cstat
 	} else {
@@ -601,6 +601,8 @@ func (conn *Conn) ChildrenW(path string) (children []string, stat *Stat, watch <
 	watchId, watchChannel := conn.createWatch(true)
 
 	cvector := C.struct_String_vector{}
+	defer C.deallocate_String_vector(cvector)
+
 	var cstat Stat
 	rc, cerr := C.zoo_wget_children2_int(conn.handle, cpath, C.watch_handler, C.ulong(watchId), &cvector, &cstat.c)
 
@@ -608,8 +610,6 @@ func (conn *Conn) ChildrenW(path string) (children []string, stat *Stat, watch <
 	if cvector.count != 0 {
 		children = parseStringVector(&cvector)
 	}
-	C.deallocate_String_vector(cvector)
-
 	if rc == C.ZOK {
 		stat = &cstat
 		watch = watchChannel
