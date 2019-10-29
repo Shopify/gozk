@@ -567,6 +567,8 @@ func (conn *Conn) Children(path string) (children []string, stat *Stat, err erro
 	defer C.free(unsafe.Pointer(cpath))
 
 	cvector := C.struct_String_vector{}
+	defer C.deallocate_String_vector(&cvector)
+
 	var cstat Stat
 	rc, cerr := C.zoo_wget_children2(conn.handle, cpath, nil, nil, &cvector, &cstat.c)
 
@@ -599,6 +601,8 @@ func (conn *Conn) ChildrenW(path string) (children []string, stat *Stat, watch <
 	watchId, watchChannel := conn.createWatch(true)
 
 	cvector := C.struct_String_vector{}
+	defer C.deallocate_String_vector(&cvector)
+
 	var cstat Stat
 	rc, cerr := C.zoo_wget_children2_int(conn.handle, cpath, C.watch_handler, C.ulong(watchId), &cvector, &cstat.c)
 
@@ -625,7 +629,6 @@ func parseStringVector(cvector *C.struct_String_vector) []string {
 		cpath := *(**C.char)(unsafe.Pointer(cpathPos))
 		vector[i] = C.GoString(cpath)
 	}
-	C.deallocate_String_vector(cvector)
 	return vector
 }
 
