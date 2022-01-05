@@ -8,13 +8,13 @@
 //
 package zookeeper
 
-/*
-#cgo CFLAGS: -I/usr/include/c-client-src -I/usr/include/zookeeper
-#cgo LDFLAGS: -lzookeeper_mt
-
-#include <zookeeper.h>
-#include "helpers.h"
-*/
+// #cgo CFLAGS: -DTHREADED -I/usr/include/zookeeper
+// #cgo darwin CFLAGS: -DTHREADED -I/opt/homebrew/include/zookeeper
+// #cgo LDFLAGS: -lzookeeper_mt
+// #cgo darwin LDFLAGS: -L/opt/homebrew/lib
+//
+// #include <zookeeper.h>
+// #include "helpers.h"
 import "C"
 
 import (
