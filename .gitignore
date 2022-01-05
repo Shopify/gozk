@@ -4,3 +4,4 @@ _*
 [568].out
 *.cgo*.c
 *.cgo*.go
+tags

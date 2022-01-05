@@ -1,4 +1,0 @@
-Check out https://wiki.ubuntu.com/gozk
-
-Forked from https://github.com/youtube/vitess/tree/master/third_party/go/launchpad.net/gozk/zookeeper
-to fix panic issues in some of the watch functions.
