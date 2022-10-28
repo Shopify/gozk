@@ -469,7 +469,7 @@ func dial(servers string, recvTimeout time.Duration, clientId *ClientId) (*Conn,
 // seconds.
 // The default is `0` and means hostnames won't be re-resolved.
 func (conn *Conn) SetServersResolutionDelay(delay time.Duration) {
-	C.zoo_set_servers_resolution_delay(conn.handle, delay.Milliseconds())
+	C.zoo_set_servers_resolution_delay(conn.handle, C.int(delay.Milliseconds()))
 }
 
 // ConnectedServer returns the ip and port of the current server connection.
