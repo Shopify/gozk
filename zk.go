@@ -476,7 +476,6 @@ func (conn *Conn) SetServersResolutionDelay(delay time.Duration) {
 func (conn *Conn) ConnectedServer() string {
 	ptr := C.zoo_get_current_server(conn.handle)
 	s := C.GoString(ptr)
-	C.free(unsafe.Pointer(ptr))
 	return s
 }
 
