@@ -475,8 +475,8 @@ func (conn *Conn) SetServersResolutionDelay(delay time.Duration) {
 // ConnectedServer returns the ip and port of the current server connection.
 func (conn *Conn) ConnectedServer() string {
 	ptr := C.zoo_get_current_server(conn.handle)
-	s := C.GoString(ptr)
-	return s
+	// Note, ptr does not have to be freed because it's statically allocated in https://github.com/apache/zookeeper/blob/50d5722dd3342530eae4a737d9759ec5f774c84b/zookeeper-client/zookeeper-client-c/src/zookeeper.c#L5114
+	return C.GoString(ptr)
 }
 
 // CurrentServer returns the IP and port of the currently connected zookeeper server or an error.
