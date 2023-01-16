@@ -1,17 +1,17 @@
 // gozk - ZooKeeper support for the Go language
 //
-//   https://wiki.ubuntu.com/gozk
+//	https://wiki.ubuntu.com/gozk
 //
 // Copyright (c) 2010-2011 Canonical Ltd.
 //
 // Written by Gustavo Niemeyer <gustavo.niemeyer@canonical.com>
-//
 package zookeeper
 
 /*
 #cgo CFLAGS: -I/usr/include/c-client-src -I/usr/include/zookeeper
 #cgo LDFLAGS: -lzookeeper_mt
 
+#include <netinet/in.h>
 #include <zookeeper.h>
 #include "helpers.h"
 */
@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"syscall"
 	"time"
 	"unsafe"
 )
@@ -85,11 +86,11 @@ type ACL struct {
 // and they also have a good String method so they may be used as an
 // os.Error value if wanted. E.g.:
 //
-//     event := <-watch
-//     if !event.Ok() {
-//         err = event
-//         return
-//     }
+//	event := <-watch
+//	if !event.Ok() {
+//	    err = event
+//	    return
+//	}
 //
 // Note that closed channels will deliver zeroed Event, which means
 // event.Type is set to EVENT_CLOSED and event.State is set to STATE_CLOSED,
@@ -456,9 +457,43 @@ func dial(servers string, recvTimeout time.Duration, clientId *ClientId) (*Conn,
 		conn.closeAllWatches()
 		return nil, nil, zkError(C.int(ZSYSTEMERROR), cerr, "dial", "")
 	}
+
 	conn.handle = handle
 	runWatchLoop()
 	return conn, watchChannel, nil
+}
+
+// SetServersResolutionDelay sets how long the client should wait before re-resolving the zookeeper's hostnames.
+// Setting this to any value larger than 0 will cause gozk to query DNS periodically for the zookeeper hostnames
+// it's been configured with. For example, setting this to `2 * times.Second` will trigger a DNS lookup every 2
+// seconds.
+// The default is `0` and means hostnames won't be re-resolved.
+func (conn *Conn) SetServersResolutionDelay(delay time.Duration) {
+	C.zoo_set_servers_resolution_delay(conn.handle, C.int(delay.Milliseconds()))
+}
+
+// ConnectedServer returns the ip and port of the current server connection.
+func (conn *Conn) ConnectedServer() string {
+	ptr := C.zoo_get_current_server(conn.handle)
+	// Note, ptr does not have to be freed because it's statically allocated in https://github.com/apache/zookeeper/blob/50d5722dd3342530eae4a737d9759ec5f774c84b/zookeeper-client/zookeeper-client-c/src/zookeeper.c#L5114
+	return C.GoString(ptr)
+}
+
+// CurrentServer returns the IP and port of the currently connected zookeeper server or an error.
+func (conn *Conn) CurrentServer() (string, error) {
+
+	addr := &syscall.RawSockaddrInet4{}
+	sizeof := syscall.SizeofSockaddrInet4
+
+	if C.zookeeper_get_connected_host(conn.handle, (*C.struct_sockaddr)(unsafe.Pointer(addr)), (*C.uint)(unsafe.Pointer(&sizeof))) == nil {
+		return "", fmt.Errorf("not currently connected or unable to resolve peer")
+	}
+
+	return fmt.Sprintf("%d.%d.%d.%d:%d", addr.Addr[0], addr.Addr[1], addr.Addr[2], addr.Addr[3], addr.Port), nil
+}
+
+func (conn *Conn) SetServers(servers string) {
+	C.zoo_set_servers(conn.handle, C.CString(servers))
 }
 
 // ClientId returns the client ID for the existing session with ZooKeeper.
@@ -955,7 +990,6 @@ type ChangeFunc func(oldValue string, oldStat *Stat) (newValue string, err error
 // version.  If this procedure fails due to conflicts (concurrent changes
 // in the same node), repeat from step 1.  If this procedure fails with any
 // other error, stop and return the error found.
-//
 func (conn *Conn) RetryChange(path string, flags int, acl []ACL, changeFunc ChangeFunc) error {
 	for {
 		oldValue, oldStat, err := conn.Get(path)
